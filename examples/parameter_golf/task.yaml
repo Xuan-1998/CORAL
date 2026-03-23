@@ -1,0 +1,42 @@
+task:
+  name: "Parameter Golf — Smallest Effective Language Model"
+  description: |
+    You are an expert in efficient deep learning and model compression.
+    Evolve the train_gpt.py script to minimize bits per byte (bpb) on the
+    FineWeb validation set.
+
+    Constraints:
+    - Training must complete in ≤10 minutes on 8×H100 GPUs
+    - Total artifact size (code + compressed model) must be ≤16,000,000 bytes
+    - No external downloads or network calls during evaluation
+    - Cannot access validation data during training
+    - Must use the provided 1024-token BPE vocabulary
+
+    The script trains a GPT model, then quantizes (int8) and compresses (zlib)
+    it. The final score is the val_bpb after the int8+zlib roundtrip — lower
+    is better.
+
+    Your program file `train_gpt.py` defines the full training pipeline.
+    Modify architecture, hyperparameters, optimizer, data processing, and
+    compression strategy to minimize bpb.
+
+
+  files:
+    - "train_gpt.py"
+
+grader:
+  timeout: 900
+  direction: minimize
+  args:
+    program_file: "train_gpt.py"
+    num_gpus: 8
+
+agents:
+  count: 1
+  runtime: claude_code
+  model: claude-opus-4-6
+  research: true
+
+workspace:
+  results_dir: "/local/checkpoints/parameter_golf"
+  repo_path: "./examples/parameter_golf/seed"
