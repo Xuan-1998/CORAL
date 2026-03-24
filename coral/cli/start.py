@@ -174,6 +174,12 @@ def cmd_start(args: argparse.Namespace) -> None:
             file=sys.stderr,
         )
 
+    # If we're the inner process spawned by _start_in_tmux, run.tmux=false was
+    # added to avoid recursion.  Restore it so the saved config preserves the
+    # user's original intent (otherwise `coral resume` won't launch tmux).
+    if in_tmux():
+        config.run.tmux = True
+
     from coral.agent.manager import AgentManager
     from coral.cli.validation import validate_task
 
