@@ -29,7 +29,9 @@ class GraderConfig:
     module: str = ""  # Python module path for custom graders
     timeout: int = 300  # eval timeout in seconds (0 = no limit)
     args: dict[str, Any] = field(default_factory=dict)
-    private: list[str] = field(default_factory=list)  # files/dirs copied to .coral/ (hidden from agents)
+    private: list[str] = field(
+        default_factory=list
+    )  # files/dirs copied to .coral/ (hidden from agents)
     direction: str = "maximize"  # "maximize" or "minimize"
 
 
@@ -52,10 +54,12 @@ class AgentConfig:
     runtime_options: dict[str, Any] = field(default_factory=dict)
     max_turns: int = 200
     timeout: int = 3600
-    heartbeat: list[HeartbeatActionConfig] = field(default_factory=lambda: [
-        HeartbeatActionConfig(name="reflect", every=1),
-        HeartbeatActionConfig(name="consolidate", every=10, is_global=True),
-    ])
+    heartbeat: list[HeartbeatActionConfig] = field(
+        default_factory=lambda: [
+            HeartbeatActionConfig(name="reflect", every=1),
+            HeartbeatActionConfig(name="consolidate", every=10, is_global=True),
+        ]
+    )
     research: bool = True  # enable web search / literature review step in workflow
 
     def heartbeat_interval(self, name: str) -> int:
@@ -87,6 +91,15 @@ class WorkspaceConfig:
 
 
 @dataclass
+class RunConfig:
+    """Runtime flags for a CORAL session."""
+
+    verbose: bool = False
+    ui: bool = False
+    tmux: bool = True
+
+
+@dataclass
 class CoralConfig:
     """Top-level project configuration."""
 
@@ -95,6 +108,7 @@ class CoralConfig:
     agents: AgentConfig = field(default_factory=AgentConfig)
     sharing: SharingConfig = field(default_factory=SharingConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    run: RunConfig = field(default_factory=RunConfig)
     task_dir: Path | None = None  # internal: directory containing task.yaml
 
     @classmethod
@@ -162,13 +176,22 @@ def _preprocess(data: dict[str, Any]) -> dict[str, Any]:
         ]
     elif old_reflect is not None or old_heartbeat is not None:
         agents_data["heartbeat"] = [
-            {"name": "reflect", "every": old_reflect if old_reflect is not None else 1, "is_global": False},
-            {"name": "consolidate", "every": old_heartbeat if old_heartbeat is not None else 10, "is_global": False},
+            {
+                "name": "reflect",
+                "every": old_reflect if old_reflect is not None else 1,
+                "is_global": False,
+            },
+            {
+                "name": "consolidate",
+                "every": old_heartbeat if old_heartbeat is not None else 10,
+                "is_global": False,
+            },
         ]
 
     # If runtime is set but model is not, use the runtime-specific default
     if "runtime" in agents_data and "model" not in agents_data:
         from coral.agent.registry import default_model_for_runtime
+
         default_model = default_model_for_runtime(agents_data["runtime"])
         if default_model:
             agents_data["model"] = default_model

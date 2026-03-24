@@ -4,7 +4,14 @@ import tempfile
 
 import pytest
 
-from coral.config import AgentConfig, CoralConfig, GraderConfig, TaskConfig, WorkspaceConfig
+from coral.config import (
+    AgentConfig,
+    CoralConfig,
+    GraderConfig,
+    RunConfig,
+    TaskConfig,
+    WorkspaceConfig,
+)
 
 
 def test_config_roundtrip():
@@ -156,6 +163,40 @@ def test_heartbeat_global_flag_roundtrip():
     # Round-trip through to_dict
     d = config.to_dict()
     assert d["agents"]["heartbeat"][0]["global"] is True
+
+
+def test_run_config_defaults():
+    config = CoralConfig(
+        task=TaskConfig(name="t", description="d"),
+    )
+    assert config.run.verbose is False
+    assert config.run.ui is False
+    assert config.run.tmux is True
+
+
+def test_run_config_dotlist_override():
+    config = CoralConfig(
+        task=TaskConfig(name="t", description="d"),
+    )
+    merged = CoralConfig.merge_dotlist(config, ["run.tmux=false", "run.verbose=true"])
+    assert merged.run.tmux is False
+    assert merged.run.verbose is True
+    assert merged.run.ui is False
+
+
+def test_run_config_roundtrip():
+    config = CoralConfig(
+        task=TaskConfig(name="t", description="d"),
+        run=RunConfig(verbose=True, ui=True, tmux=False),
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
+        config.to_yaml(f.name)
+        restored = CoralConfig.from_yaml(f.name)
+
+    assert restored.run.verbose is True
+    assert restored.run.ui is True
+    assert restored.run.tmux is False
 
 
 def test_to_dict_excludes_task_dir():

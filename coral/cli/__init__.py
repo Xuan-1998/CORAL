@@ -41,9 +41,23 @@ class _HelpOnErrorParser(argparse.ArgumentParser):
 
 # All visible commands for "did you mean?" suggestions
 _VISIBLE_COMMANDS = [
-    "init", "validate", "start", "resume", "stop", "status",
-    "log", "show", "notes", "skills", "runs",
-    "ui", "eval", "diff", "revert", "checkout", "heartbeat",
+    "init",
+    "validate",
+    "start",
+    "resume",
+    "stop",
+    "status",
+    "log",
+    "show",
+    "notes",
+    "skills",
+    "runs",
+    "ui",
+    "eval",
+    "diff",
+    "revert",
+    "checkout",
+    "heartbeat",
 ]
 
 
@@ -152,33 +166,32 @@ Run 'coral <command> --help' for details on any command."""
             "Examples:\n"
             "  coral start -c task.yaml\n"
             "  coral start -c task.yaml agents.count=4 agents.model=opus\n"
-            "  coral start -c task.yaml --ui agents.research=false"
+            "  coral start -c task.yaml run.verbose=true run.ui=true run.tmux=false"
         ),
         formatter_class=_CommandHelpFormatter,
     )
     p_start.add_argument("--config", "-c", required=True, help="Path to task config YAML")
     p_start.add_argument(
-        "--verbose", "-v", action="store_true", help="Stream agent output to terminal"
-    )
-    p_start.add_argument("--ui", action="store_true", help="Also launch the web dashboard")
-    p_start.add_argument("--no-tmux", action="store_true", help="Don't auto-create a tmux session")
-    p_start.add_argument(
-        "overrides", nargs="*", default=[],
-        help="Config overrides as key=value (e.g. agents.count=4 grader.timeout=600)",
+        "overrides",
+        nargs="*",
+        default=[],
+        help="Config overrides as key=value (e.g. agents.count=4 run.verbose=true run.tmux=false)",
     )
 
     p_resume = sub.add_parser(
         "resume",
         help="Resume a previous run",
         description="Resume agents from a previous run, restoring their sessions.",
-        epilog="Examples:\n  coral resume\n  coral resume --task my-task --model opus",
+        epilog="Examples:\n  coral resume\n  coral resume --task my-task agents.model=opus",
         formatter_class=_CommandHelpFormatter,
     )
     _add_run_args(p_resume)
-    p_resume.add_argument("--model", "-m", help="Model override")
-    p_resume.add_argument("--verbose", "-v", action="store_true", help="Stream agent output")
-    p_resume.add_argument("--ui", action="store_true", help="Also launch the web dashboard")
-    p_resume.add_argument("--no-tmux", action="store_true", help="Don't auto-create a tmux session")
+    p_resume.add_argument(
+        "overrides",
+        nargs="*",
+        default=[],
+        help="Config overrides as key=value (e.g. agents.model=opus run.verbose=true)",
+    )
 
     p_stop = sub.add_parser(
         "stop",
@@ -368,7 +381,10 @@ Run 'coral <command> --help' for details on any command."""
     hb_set.add_argument("--every", type=int, required=True, help="Trigger every N evals")
     hb_set.add_argument("--prompt", help="Prompt text (required for custom actions)")
     hb_set.add_argument(
-        "--global", dest="is_global", action="store_true", default=None,
+        "--global",
+        dest="is_global",
+        action="store_true",
+        default=None,
         help="Use global eval counter (shared across all agents)",
     )
     _add_run_args(hb_set)
