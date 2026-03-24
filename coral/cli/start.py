@@ -116,10 +116,19 @@ def _resume_in_tmux(args: argparse.Namespace, config: CoralConfig, coral_dir: Pa
     )
 
     cmd = [_resolved_python(), "-m", "coral.cli", "resume"]
+    # Derive task/run from coral_dir path to avoid re-prompting inside tmux.
+    # Path structure: results/<task>/<run>/.coral
+    resolved = coral_dir.resolve()
+    run_name = resolved.parent.name
+    task_slug = resolved.parent.parent.name
     if args.task:
         cmd.extend(["--task", args.task])
+    else:
+        cmd.extend(["--task", task_slug])
     if args.run:
         cmd.extend(["--run", args.run])
+    else:
+        cmd.extend(["--run", run_name])
     # Forward user overrides, then force tmux off (inner process is already in tmux)
     cmd.extend(getattr(args, "overrides", []))
     cmd.append("run.tmux=false")
