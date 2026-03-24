@@ -16,44 +16,24 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Load prompt templates from markdown files
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+
+def _load_prompt(name: str) -> str:
+    """Load a prompt template from the prompts directory."""
+    prompt_file = _PROMPTS_DIR / f"{name}.md"
+    if prompt_file.exists():
+        return prompt_file.read_text()
+    return ""
+
 
 # Prompt templates use {shared_dir} which is resolved at runtime to the
 # agent's shared directory (`.claude/` for Claude Code, `.codex/` for Codex,
 # `.opencode/` for OpenCode).
 DEFAULT_PROMPTS: dict[str, str] = {
-    "reflect": (
-        "## Heartbeat: Reflection\n"
-        "\n"
-        "Before continuing, record what you've learned from recent work.\n"
-        "\n"
-        "1. **Write or update a note** in `{shared_dir}/notes/`.\n"
-        "   What worked? What didn't? What patterns do you see? What should you try next?\n"
-        "   Use a descriptive filename (e.g., `gradient-descent-findings.md`).\n"
-        "   Update an existing note if it covers the same topic.\n"
-        "\n"
-        "2. **Create or update a skill** in `{shared_dir}/skills/<name>/` with SKILL.md + scripts/ + examples/.\n"
-        "   Any technique, optimization, or workflow worth reusing belongs in a skill.\n"
-        "   Follow `{shared_dir}/skills/skill-creator/SKILL.md` for the full workflow.\n"
-        "\n"
-        "After recording, continue optimizing.\n"
-    ),
-    "consolidate": (
-        "## Heartbeat: Notes-to-Skills Consolidation\n"
-        "\n"
-        "Pause your current work and consolidate shared knowledge.\n"
-        "\n"
-        "### Instructions:\n"
-        "\n"
-        "1. **Read all notes** in `{shared_dir}/notes/` and identify common themes and patterns\n"
-        "2. **Merge redundant/overlapping notes** \u2014 combine notes that cover the same topic into one consolidated note\n"
-        "3. **Extract reusable techniques into skills** \u2014 create or update skills in `{shared_dir}/skills/` "
-        "for any technique, optimization, or workflow that is general enough to reuse\n"
-        "   Follow `{shared_dir}/skills/skill-creator/SKILL.md` for the skill format\n"
-        "4. **Delete notes** that have been fully captured in skills (remove the file)\n"
-        "\n"
-        "If there are only a few notes, a quick review is fine.\n"
-        "After consolidation, resume optimizing.\n"
-    ),
+    "reflect": _load_prompt("reflect"),
+    "consolidate": _load_prompt("consolidate"),
 }
 
 # Which built-in actions default to global scope
