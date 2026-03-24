@@ -58,21 +58,12 @@ def _build_coral_command(args: argparse.Namespace) -> list[str]:
     """Reconstruct the coral start command with --no-tmux added."""
     cmd = [_resolved_python(), "-m", "coral.cli", "start"]
     cmd.extend(["--config", str(Path(args.config).resolve())])
-    if args.agents:
-        cmd.extend(["--agents", str(args.agents)])
-    if args.model:
-        cmd.extend(["--model", args.model])
-    if args.runtime:
-        cmd.extend(["--runtime", args.runtime])
-    if args.research is True:
-        cmd.append("--research")
-    elif args.research is False:
-        cmd.append("--no-research")
     if args.verbose:
         cmd.append("--verbose")
     if args.ui:
         cmd.append("--ui")
     cmd.append("--no-tmux")
+    cmd.extend(getattr(args, "overrides", []))
     return cmd
 
 
@@ -199,20 +190,9 @@ def cmd_start(args: argparse.Namespace) -> None:
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
-    if args.agents:
-        config.agents.count = args.agents
-    if args.runtime:
-        config.agents.runtime = args.runtime
-    if args.model:
-        config.agents.model = args.model
-    elif args.runtime:
-        # No explicit --model but runtime changed: use runtime-specific default
-        from coral.agent.registry import default_model_for_runtime
-        default_model = default_model_for_runtime(args.runtime)
-        if default_model:
-            config.agents.model = default_model
-    if args.research is not None:
-        config.agents.research = args.research
+    overrides = getattr(args, "overrides", [])
+    if overrides:
+        config = CoralConfig.merge_dotlist(config, overrides)
 
     if verbose:
         print(f"[coral] Config:     {args.config}")
@@ -235,6 +215,13 @@ def cmd_start(args: argparse.Namespace) -> None:
         print(f"  {h.agent_id}: PID {h.process.pid if h.process else '?'} @ {h.worktree_path}")
 
     assert manager.paths is not None
+
+    # Save the starting command for reproducibility
+    start_cmd = f"coral start -c {args.config}"
+    if overrides:
+        start_cmd += " " + " ".join(overrides)
+    (manager.paths.run_dir / "start_cmd.txt").write_text(start_cmd + "\n")
+
     print(f"\nRun directory: {manager.paths.run_dir}")
     print(f"Logs:          {manager.paths.coral_dir / 'public' / 'logs'}")
 

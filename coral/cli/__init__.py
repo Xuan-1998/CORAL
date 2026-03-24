@@ -151,26 +151,21 @@ Run 'coral <command> --help' for details on any command."""
         epilog=(
             "Examples:\n"
             "  coral start -c task.yaml\n"
-            "  coral start -c task.yaml --agents 4 --model opus\n"
-            "  coral start -c task.yaml --ui"
+            "  coral start -c task.yaml agents.count=4 agents.model=opus\n"
+            "  coral start -c task.yaml --ui agents.research=false"
         ),
         formatter_class=_CommandHelpFormatter,
     )
     p_start.add_argument("--config", "-c", required=True, help="Path to task config YAML")
-    p_start.add_argument("--agents", type=int, help="Number of agents to spawn")
-    p_start.add_argument("--model", "-m", help="Model override (e.g. opus, sonnet, haiku)")
     p_start.add_argument(
         "--verbose", "-v", action="store_true", help="Stream agent output to terminal"
     )
-    p_start.add_argument(
-        "--research",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Enable/disable web search (--research / --no-research)",
-    )
-    p_start.add_argument("--runtime", help="Agent runtime (e.g. claude_code, codex)")
     p_start.add_argument("--ui", action="store_true", help="Also launch the web dashboard")
     p_start.add_argument("--no-tmux", action="store_true", help="Don't auto-create a tmux session")
+    p_start.add_argument(
+        "overrides", nargs="*", default=[],
+        help="Config overrides as key=value (e.g. agents.count=4 grader.timeout=600)",
+    )
 
     p_resume = sub.add_parser(
         "resume",
