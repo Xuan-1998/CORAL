@@ -144,6 +144,10 @@ def _resume_in_tmux(args: argparse.Namespace, coral_dir: Path) -> None:
         cmd.append("--verbose")
     if getattr(args, "ui", False):
         cmd.append("--ui")
+    # Forward --instruction flag if provided
+    instruction = getattr(args, "instruction", None)
+    if instruction:
+        cmd.extend(["--instruction", instruction])
     cmd.append("--no-tmux")
     shell_cmd = " ".join(f"'{c}'" if " " in c else c for c in cmd)
 
@@ -340,8 +344,9 @@ def cmd_resume(args: argparse.Namespace) -> None:
         print(f"[coral] Task:    {config.task.name}")
         print(f"[coral] Model:   {config.agents.model}")
 
+    instruction = getattr(args, "instruction", None)
     manager = AgentManager(config, verbose=verbose)
-    handles = manager.resume_all(paths)
+    handles = manager.resume_all(paths, instruction=instruction)
 
     print(f"Resumed {len(handles)} agent(s):")
     for h in handles:

@@ -180,6 +180,13 @@ Run 'coral <command> --help' for details on any command."""
         formatter_class=_CommandHelpFormatter,
     )
     _add_run_args(p_resume)
+    p_resume.add_argument(
+        "--instruction",
+        "-i",
+        type=str,
+        default=None,
+        help="Additional instruction to inject into agents at resume time",
+    )
     p_resume.add_argument("--model", "-m", help="Model override")
     p_resume.add_argument("--verbose", "-v", action="store_true", help="Stream agent output")
     p_resume.add_argument("--ui", action="store_true", help="Also launch the web dashboard")

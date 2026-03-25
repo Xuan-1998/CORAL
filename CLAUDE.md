@@ -69,6 +69,7 @@ coral init my-task                 # Scaffold a new task
 coral validate my-task             # Test the grader
 coral start -c task.yaml           # Launch agents
 coral resume                       # Resume a previous run
+coral resume -i "Try greedy approaches"  # Resume with additional instruction
 coral stop                         # Stop all agents
 coral status                       # Agent health + leaderboard
 coral log                          # Leaderboard (top 20)
