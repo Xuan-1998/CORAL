@@ -212,7 +212,7 @@ class AgentManager:
             prompt_source=prompt_source,
         )
 
-    def resume_all(self, paths: ProjectPaths) -> list[AgentHandle]:
+    def resume_all(self, paths: ProjectPaths, instruction: str | None = None) -> list[AgentHandle]:
         """Resume agents into an existing run's worktrees."""
         self._start_time = datetime.now(UTC)
         self.paths = paths
@@ -248,6 +248,9 @@ class AgentManager:
             "Build on what worked. Don't duplicate prior efforts."
         )
 
+        if instruction:
+            fresh_start_prompt += f"\n\n## Additional Instructions\n{instruction}"
+
         handles = []
         for agent_dir in agent_dirs:
             agent_id = agent_dir.name
@@ -266,7 +269,7 @@ class AgentManager:
 
             if session_id:
                 logger.info(f"Resuming {agent_id} with session {session_id}")
-                prompt = None  # runtime default: "Session resumed. Continue where you left off."
+                prompt = instruction if instruction else None  # None → runtime default
             else:
                 logger.info(f"Starting {agent_id} fresh (no session to resume)")
                 prompt = fresh_start_prompt
