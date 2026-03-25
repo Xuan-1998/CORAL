@@ -186,8 +186,8 @@ def cmd_start(args: argparse.Namespace) -> None:
         )
 
     from coral.agent.manager import AgentManager
-    from coral.config import CoralConfig
     from coral.cli.validation import validate_task
+    from coral.config import CoralConfig
 
     verbose = args.verbose
     setup_logging(verbose=verbose)

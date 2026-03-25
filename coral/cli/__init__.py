@@ -62,7 +62,7 @@ class _MainParser(_HelpOnErrorParser):
                 matches = difflib.get_close_matches(bad_cmd, _VISIBLE_COMMANDS, n=3, cutoff=0.5)
                 sys.stderr.write(f"\nerror: unknown command '{bad_cmd}'\n")
                 if matches:
-                    sys.stderr.write(f"\nDid you mean?\n")
+                    sys.stderr.write("\nDid you mean?\n")
                     for m in matches:
                         sys.stderr.write(f"  coral {m}\n")
                 sys.stderr.write("\n")
