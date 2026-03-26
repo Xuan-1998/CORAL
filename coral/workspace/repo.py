@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -180,12 +181,47 @@ def copy_private_data(private_paths: list[str], coral_dir: Path, config_dir: Pat
             logger.info(f"Private data file: {src.name}")
 
 
-def run_setup_commands(commands: list[str], cwd: Path) -> None:
+def _extract_corrupted_packages(stderr: str) -> list[str]:
+    """Extract package names from uv metadata-read errors.
+
+    Matches lines like: ``Failed to read `colorlog==6.10.1```
+    """
+    return re.findall(r"Failed to read `([^=]+)==[^`]+`", stderr)
+
+
+def _repair_corrupted_packages(packages: list[str], cwd: Path) -> bool:
+    """Force-reinstall packages with corrupted dist-info metadata."""
+    if not packages:
+        return False
+    reinstall_args = []
+    for pkg in packages:
+        reinstall_args.extend(["--reinstall-package", pkg])
+    cmd = ["uv", "pip", "install"] + reinstall_args + packages
+    logger.info(f"Repairing corrupted packages: {packages}")
+    result = subprocess.run(
+        cmd, cwd=str(cwd), capture_output=True, text=True, env=_clean_env(),
+    )
+    if result.returncode != 0:
+        logger.warning(f"Repair failed: {result.stderr.strip()}")
+        return False
+    return True
+
+
+def run_setup_commands(
+    commands: list[str],
+    cwd: Path,
+    extra_env: dict[str, str] | None = None,
+) -> None:
     """Run setup commands in the given directory.
 
-    Commands are executed sequentially via the shell. If any command fails,
-    a RuntimeError is raised with the failing command and stderr.
+    Commands are executed sequentially via the shell. If any command fails
+    due to corrupted venv metadata (dist-info), a repair is attempted and
+    the command is retried once. Other failures raise RuntimeError.
     """
+    env = _clean_env()
+    if extra_env:
+        env.update(extra_env)
+
     for cmd in commands:
         logger.info(f"Running setup command: {cmd}")
         result = subprocess.run(
@@ -194,14 +230,27 @@ def run_setup_commands(commands: list[str], cwd: Path) -> None:
             cwd=str(cwd),
             capture_output=True,
             text=True,
-            env=_clean_env(),
+            env=env,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Setup command failed (exit {result.returncode}): {cmd}\n"
-                f"stdout: {result.stdout}\n"
-                f"stderr: {result.stderr}"
-            )
+            # Check for corrupted dist-info metadata and retry once
+            corrupted = _extract_corrupted_packages(result.stderr)
+            if corrupted and _repair_corrupted_packages(corrupted, cwd):
+                logger.info(f"Retrying after repair: {cmd}")
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    cwd=str(cwd),
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Setup command failed (exit {result.returncode}): {cmd}\n"
+                    f"stdout: {result.stdout}\n"
+                    f"stderr: {result.stderr}"
+                )
         if result.stdout.strip():
             logger.debug(f"Setup stdout: {result.stdout.strip()}")
 
