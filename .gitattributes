@@ -1,0 +1,2 @@
+examples/frontier_cs_algo/*/eval/testdata/*.in filter=lfs diff=lfs merge=lfs -text
+examples/frontier_cs_algo/*/eval/testdata/*.ans filter=lfs diff=lfs merge=lfs -text
