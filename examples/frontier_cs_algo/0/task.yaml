@@ -45,6 +45,8 @@ task:
 grader:
   timeout: 340
   direction: maximize
+  python_path:
+    - $HOME/code/Frontier-CS/src
   args:
     problem_id: '0'
     problem_type: default

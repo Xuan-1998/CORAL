@@ -33,6 +33,7 @@ class GraderConfig:
         default_factory=list
     )  # files/dirs copied to .coral/ (hidden from agents)
     direction: str = "maximize"  # "maximize" or "minimize"
+    python_path: list[str] = field(default_factory=list)  # extra sys.path entries for grader
 
 
 @dataclass

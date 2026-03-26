@@ -32,6 +32,8 @@ classifiers = [
 dependencies = [
     "pyyaml>=6.0",
     "omegaconf>=2.3.0",
+    "requests>=2.32.5",
+    "tqdm>=4.67.1",
 ]
 
 [project.optional-dependencies]
@@ -67,7 +69,7 @@ ui = [
     "pyyaml>=6.0",
 ]
 all = [
-    "coral[dev,swebench,terminalbench,erdos,frontier-cs,ui]",
+    "coral[dev,swebench,erdos,frontier-cs,ui]",
 ]
 
 [project.scripts]

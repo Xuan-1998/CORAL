@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,13 @@ def load_grader(config: CoralConfig, coral_dir: str | Path) -> Any:
     coral_dir = Path(coral_dir)
     private_dir = coral_dir / "private"
     grader_path = private_dir / "eval" / "grader.py"
+
+    # Add extra python_path entries before importing the grader
+    for p in config.grader.python_path:
+        resolved = str(Path(os.path.expandvars(p)).expanduser().resolve())
+        if resolved not in sys.path:
+            sys.path.insert(0, resolved)
+            logger.debug(f"Added {resolved} to sys.path")
 
     if not grader_path.exists():
         # Fallback: load builtin grader by type name
