@@ -167,7 +167,8 @@ coral log -n 5                       # Top 5
 coral log --recent                   # Sort by time
 coral log --agent {agent_id}         # Your history
 coral log --search "query"           # Search all attempts
-coral show <hash>                    # Details + diff for one attempt
+coral show <hash>                    # Details + file summary for one attempt
+coral show <hash> --diff             # Details + full code diff
 
 # Notes & Skills
 coral notes                          # List all notes
