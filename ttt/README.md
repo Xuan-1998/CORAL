@@ -38,14 +38,26 @@ The entrypoint. Uses Hydra to load rLLM's unified config and accepts a CORAL `ta
 
 The generator is an `@rllm.rollout`-decorated function called once per training step. Instead of making direct LLM calls, it orchestrates a full CORAL agent run:
 
+**On-policy routing:**
+
+Before starting or resuming agents, the generator writes a `.litellm_rllm.yaml` config that routes CORAL's gateway to `config.base_url` — the rLLM inference server serving the current policy weights. This is passed as a CORAL CLI override (`agents.gateway.config=...`). The request chain becomes:
+
+```
+CORAL agent → CORAL gateway (logs traces) → rLLM inference server (on-policy model)
+```
+
+If `config.base_url` is empty (e.g. standalone testing), the generator falls back to whatever upstream is defined in the task YAML's original `litellm_config.yaml`.
+
 **First call — `coral start`:**
-1. Launches `coral start --config task.yaml run.session=local` as a background subprocess.
-2. Discovers the `.coral` directory by reading `results_dir` and `task.name` from the YAML, then following the `latest` symlink.
-3. Initializes tracking state: `seen_hashes` (set of processed attempt commit hashes), `trace_offset` (line offset into the gateway JSONL).
+1. Generates the on-policy gateway config from `config.base_url`.
+2. Launches `coral start --config task.yaml run.session=local agents.gateway.config=...` as a background subprocess.
+3. Discovers the `.coral` directory by reading `results_dir` and `task.name` from the YAML, then following the `latest` symlink.
+4. Initializes tracking state: `seen_hashes` (set of processed attempt commit hashes), `trace_offset` (line offset into the gateway JSONL).
 
 **Subsequent calls — `coral resume`:**
-1. Launches `coral resume --task <slug> run.session=local` as a background subprocess.
-2. Agents resume from their saved sessions (Claude Code session IDs persisted in `.coral/public/sessions.json`).
+1. Regenerates the on-policy gateway config (in case `config.base_url` changed).
+2. Launches `coral resume --task <slug> run.session=local agents.gateway.config=...` as a background subprocess.
+3. Agents resume from their saved sessions (Claude Code session IDs persisted in `.coral/public/sessions.json`).
 
 **Every call then:**
 1. **Polls for N new evals** — watches `.coral/public/attempts/` for new `<commit_hash>.json` files not in `seen_hashes`. Configurable via `N_EVALS` (default: 1). Polls every 5 seconds with a 600-second timeout.
@@ -121,12 +133,13 @@ task.yaml
 trainer.py ──► Dataset([task_data] * repeat)
   │
   ▼
-generator() is called per training step
+generator() is called per training step with config.base_url
   │
-  ├─► coral start / coral resume  (background subprocess)
+  ├─► write .litellm_rllm.yaml pointing to config.base_url (on-policy model)
+  ├─► coral start / coral resume  (background subprocess, gateway routes to rLLM)
   │     │
   │     ▼
-  │   CORAL agents run, make LLM calls through gateway, commit changes, run coral eval
+  │   CORAL agents run, make LLM calls through gateway → rLLM server
   │     │
   │     ├─► .coral/public/gateway/requests.jsonl     (LLM call traces)
   │     └─► .coral/public/attempts/<hash>.json        (eval results)

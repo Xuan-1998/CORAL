@@ -192,10 +192,60 @@ def _traces_to_trajectories(entries: list[dict]) -> list[Trajectory]:
     return trajectories
 
 
-def _start_coral(task_yaml: str) -> subprocess.Popen:
+def _write_rllm_gateway_config(task_yaml: str, base_url: str, model: str) -> str:
+    """Generate a litellm config that routes model requests to the rLLM server.
+
+    This ensures CORAL agents query the on-policy model (current training
+    weights) rather than a fixed upstream API.
+
+    Returns the path to the generated config file.
+    """
+    import yaml
+
+    with open(task_yaml) as f:
+        cfg = yaml.safe_load(f)
+
+    # Model name that CORAL agents will request (e.g. "claude/claude-opus-4-6")
+    agent_model = cfg.get("agents", {}).get("model", model)
+
+    litellm_cfg = {
+        "model_list": [
+            {
+                "model_name": agent_model,
+                "litellm_params": {
+                    "model": f"openai/{model}",
+                    "api_base": base_url,
+                    "api_key": "EMPTY",
+                },
+            }
+        ],
+        "litellm_settings": {
+            "drop_params": True,
+        },
+    }
+
+    config_path = Path(task_yaml).parent / ".litellm_rllm.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(litellm_cfg, f)
+
+    logger.info(
+        "Wrote rLLM gateway config to %s (base_url=%s, model=%s)",
+        config_path,
+        base_url,
+        agent_model,
+    )
+    return str(config_path)
+
+
+def _start_coral(
+    task_yaml: str, gateway_config: str | None = None
+) -> subprocess.Popen:
     """Launch ``coral start`` as a background subprocess."""
+    cmd = ["coral", "start", "--config", str(task_yaml), "run.session=local"]
+    if gateway_config:
+        cmd.append(f"agents.gateway.config={gateway_config}")
     proc = subprocess.Popen(
-        ["coral", "start", "--config", str(task_yaml), "run.session=local"],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -203,7 +253,9 @@ def _start_coral(task_yaml: str) -> subprocess.Popen:
     return proc
 
 
-def _resume_coral(task_yaml: str) -> subprocess.Popen:
+def _resume_coral(
+    task_yaml: str, gateway_config: str | None = None
+) -> subprocess.Popen:
     """Launch ``coral resume`` as a background subprocess."""
     # Derive task slug from YAML for explicit --task flag
     import yaml
@@ -215,6 +267,8 @@ def _resume_coral(task_yaml: str) -> subprocess.Popen:
     slug = "".join(c for c in slug if c.isalnum() or c == "-")
 
     cmd = ["coral", "resume", "--task", slug, "run.session=local"]
+    if gateway_config:
+        cmd.append(f"agents.gateway.config={gateway_config}")
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -255,16 +309,23 @@ def generator(task: Task, config: AgentConfig) -> Episode:  # noqa: ARG001
             "ttt.generator._coral_state['task_yaml'] before training."
         )
 
+    # --- 0. Route CORAL agents to the on-policy model via rLLM's server ---
+    gateway_config = None
+    if config.base_url:
+        gateway_config = _write_rllm_gateway_config(
+            task_yaml, config.base_url, config.model
+        )
+
     # --- 1. Start or resume CORAL agents ---
     if not _coral_state["started"]:
-        proc = _start_coral(task_yaml)
+        proc = _start_coral(task_yaml, gateway_config)
         _coral_state["manager_proc"] = proc
         _coral_state["coral_dir"] = _discover_coral_dir(task_yaml)
         _coral_state["started"] = True
         _coral_state["seen_hashes"] = set()
         _coral_state["trace_offset"] = 0
     else:
-        proc = _resume_coral(task_yaml)
+        proc = _resume_coral(task_yaml, gateway_config)
         _coral_state["manager_proc"] = proc
 
     coral_dir = _coral_state["coral_dir"]
