@@ -38,20 +38,17 @@ def call_vllm(url, model, messages, max_tokens=4096, temperature=1.0):
 
 
 def extract_code(response, lang="python"):
-    """Extract code block from LLM response."""
-    marker = f"```{lang}"
-    if marker in response:
-        start = response.index(marker) + len(marker)
-        end = response.index("```", start)
-        return response[start:end].strip()
-    if "```" in response:
-        start = response.index("```") + 3
-        # skip optional language tag on same line
-        nl = response.index("\n", start)
-        start = nl + 1
-        end = response.index("```", start)
-        return response[start:end].strip()
-    return response.strip()
+    """Extract code block from LLM response. Handles <think> tags."""
+    # Strip thinking tags
+    if "</think>" in response:
+        response = response[response.index("</think>") + len("</think>"):]
+
+    # Find last python code block (most likely the final answer)
+    import re
+    blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", response, re.DOTALL)
+    if blocks:
+        return blocks[-1].strip()
+    return ""
 
 
 def run_coral_grader(task_yaml, code, workdir):
@@ -226,7 +223,7 @@ def main():
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--samples-per-step", type=int, default=4, help="Candidates per step (best-of-N)")
     parser.add_argument("--temperature", type=float, default=0.8)
-    parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--max-tokens", type=int, default=8192)
     parser.add_argument("--workdir", default="/tmp/coral_pipeline")
     args = parser.parse_args()
 
