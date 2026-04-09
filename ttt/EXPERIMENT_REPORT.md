@@ -83,8 +83,50 @@ This is the core research challenge. Possible solutions:
 /fsx/xuanj/coral-ttt-venv/       # Python venv with all deps
 ```
 
+## Round 2: Qwen3-32B (2026-04-09 afternoon)
+
+### Setup
+- vLLM serving Qwen3-32B with TP=4 on 8×H200 (node 9)
+- OpenCode agent on node 10
+- `--max-model-len 65536` with `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1`
+
+### Results
+- **Agent capability**: Much stronger than 8B. Qwen3-32B can:
+  - Reason about code structure in `<think>` blocks
+  - Correctly use read/edit/bash tools
+  - Identify and analyze bugs (found indentation error)
+  - Attempt to use `coral eval` for submission
+- **7 eval attempts** produced, all crashed (score=0)
+
+### New Blockers
+1. **OpenCode edit tool + git worktree mismatch**: Agent edits files via OpenCode's edit tool, but git doesn't detect changes. The edit tool may use a virtual filesystem that doesn't write to the actual git worktree. All `coral eval` attempts fail with "nothing to commit".
+2. **Context overflow (again)**: After ~7 tool calls, conversation reaches 33K+ input tokens. OpenCode requests 32K output → total exceeds 65K limit. Agent gets stuck in compaction/retry loop.
+3. **OpenCode hardcodes max_tokens=32000**: This is the root cause of all context overflow issues. Any model with context < 65K will eventually overflow as conversation grows.
+
+### Key Finding
+**Qwen3-32B has sufficient agent capability** — the failures are all infrastructure issues (OpenCode tool integration), not model intelligence. With proper tool integration, 32B should work for CORAL TTT.
+
+## Fundamental Tension (Updated)
+
+The problem is not just "strong models aren't trainable" — it's a **three-way tension**:
+
+| Requirement | Constraint |
+|---|---|
+| Strong agent capability | Need ≥32B model |
+| Trainable weights | Need open-source model served locally |
+| Compatible agent runtime | OpenCode has bugs with git worktree + hardcoded max_tokens |
+
 ## Next Steps
 
-1. **Option 3 is most promising**: Write a simplified ThetaEvolve-style loop that uses CORAL's evaluator but not its full agent autonomy. The open model just generates code diffs, not full agent trajectories.
-2. Try Qwen3-32B or 72B if GPU budget allows — might cross the agent capability threshold.
-3. Get CORAL gateway working for proper trace collection.
+1. **Most promising: ThetaEvolve-style fixed pipeline** — Don't use OpenCode as autonomous agent. Instead:
+   - Use vLLM to serve Qwen3-32B
+   - Write a simple prompt → generate code → eval loop (like ThetaEvolve)
+   - Use CORAL's grader for evaluation
+   - Do GRPO on the generated code
+   - This bypasses all OpenCode integration issues
+
+2. **Kernel engineering** — Better suited for fixed pipeline approach since task structure is clear (generate Triton kernel → compile → benchmark runtime). But needs GPU for both model serving AND kernel evaluation.
+
+3. **Fix OpenCode integration** — File upstream issues for:
+   - Edit tool not writing to actual filesystem in git worktrees
+   - Hardcoded max_tokens=32000 (should be configurable or adaptive)
