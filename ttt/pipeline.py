@@ -236,10 +236,15 @@ def main():
 
     # Copy seed files
     seed_dir = Path(args.task).parent / "seed"
+    if not seed_dir.exists():
+        # Try repo_path from config
+        repo_path = task_cfg.get("workspace", {}).get("repo_path", ".")
+        seed_dir = Path(args.task).parent / repo_path
     if seed_dir.exists():
         import shutil
         for f in seed_dir.iterdir():
-            shutil.copy2(f, workdir)
+            if f.is_file():
+                shutil.copy2(f, workdir)
 
     # Read initial code
     submission = workdir / "submission.py"
@@ -264,7 +269,7 @@ def main():
                 response = call_vllm(args.vllm_url, args.model, messages,
                                      max_tokens=args.max_tokens, temperature=args.temperature)
                 code = extract_code(response)
-                if not code or "custom_kernel" not in code:
+                if not code or len(code) < 50:
                     log.warning("  Sample %d: no valid code extracted", i)
                     continue
 
