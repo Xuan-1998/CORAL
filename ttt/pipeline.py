@@ -196,7 +196,7 @@ with tempfile.TemporaryDirectory(prefix='coral_kernel_') as tmpdir:
 def build_prompt(task_desc, parent_code, parent_score, parent_feedback, history):
     """Build prompt for code improvement."""
     messages = [{"role": "system", "content": (
-        "You are an expert Triton kernel engineer. Generate improved kernel code. "
+        "You are an expert Triton kernel engineer. Generate improved kernel code. /no_think "
         "Output ONLY a complete Python file inside ```python ... ``` blocks. "
         "No explanations outside the code block."
     )}]
@@ -223,7 +223,7 @@ def main():
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--samples-per-step", type=int, default=4, help="Candidates per step (best-of-N)")
     parser.add_argument("--temperature", type=float, default=0.8)
-    parser.add_argument("--max-tokens", type=int, default=8192)
+    parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--workdir", default="/tmp/coral_pipeline")
     args = parser.parse_args()
 
@@ -269,6 +269,8 @@ def main():
                 response = call_vllm(args.vllm_url, args.model, messages,
                                      max_tokens=args.max_tokens, temperature=args.temperature)
                 code = extract_code(response)
+                log.info("  Sample %d raw response (first 200): %s", i, repr(response[:200]))
+                log.info("  Sample %d extracted code len: %d", i, len(code) if code else 0)
                 if not code or len(code) < 50:
                     log.warning("  Sample %d: no valid code extracted", i)
                     continue
