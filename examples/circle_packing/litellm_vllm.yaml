@@ -1,0 +1,11 @@
+# litellm config routing to local vLLM
+# Used by CORAL gateway to proxy agent requests to vLLM
+model_list:
+  - model_name: "vllm/Qwen/Qwen3-8B"
+    litellm_params:
+      model: "openai/Qwen/Qwen3-8B"
+      api_base: "http://localhost:8000/v1"
+      api_key: "EMPTY"
+
+litellm_settings:
+  drop_params: true
