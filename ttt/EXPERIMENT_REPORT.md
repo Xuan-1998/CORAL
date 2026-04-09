@@ -164,3 +164,39 @@ The problem is not just "strong models aren't trainable" — it's a **three-way 
 2. **Strategy diversity (Fusion/Precision/Memory/Hybrid)**: Failed. Constrained prompts reduce diversity compared to random sampling.
 3. **Evolutionary (crossover+mutation)**: Failed. Population of score-0 solutions can't improve through crossover.
 4. **Best-of-N sampling**: Works. Pure randomness + selection pressure is the most effective "cooperation" mechanism when model capability is low.
+
+## Round 4: GRPO Training Rounds (2026-04-09)
+
+### Setup
+- Base: Qwen3-32B via vLLM (TP=4) on H200
+- Task: TriMul kernel engineering
+- Pipeline: ThetaEvolve-style best-of-4 sampling
+
+### GRPO Training Results
+
+| Model | Training | Correctness Rate | Best Score | Runtime (µs) |
+|---|---|---|---|---|
+| Base (Qwen3-32B) | None | 37/70 (53%) | **0.0916** | 10,917 |
+| R1 (GRPO round 1) | 17 samples, 3 epochs, binary reward | 27/40 (**68%**) | 0.0913 | 10,949 |
+| R2 (GRPO round 2) | 9 samples, 5 epochs, speed-focused | 0/32 (0%) | 0.0000 | — |
+| R3 (GRPO round 3) | 3 samples, 1 epoch, entropic β=10 | 1/32 (3%) | 0.0908 | 11,013 |
+
+### Analysis
+
+1. **R1 works**: Binary GRPO on 17 samples improved correctness from 53% to 68%. This is the core TTT result — the model learned to write correct Triton kernels for this specific task.
+
+2. **R2/R3 overfit**: Both degraded because:
+   - Too few unique training samples (3-9 vs 17 for R1)
+   - The correct samples are all nearly identical (same PyTorch+Triton pattern, ~11000µs)
+   - No diversity in training signal → model collapses to a narrow mode
+
+3. **Best score plateau at ~0.091**: All correct kernels use the same strategy (PyTorch reference + minimal Triton). Score = 1000/11000µs ≈ 0.091. To break through, need fundamentally different kernel strategies (fusion, cuBLAS, mixed precision).
+
+4. **The correctness-speed tradeoff**: R1 improved correctness but not speed. R2/R3 tried to push speed but destroyed correctness. This is the classic exploration-exploitation tension in TTT.
+
+### Key Insight
+
+**TTT works for improving base capability (correctness) but struggles with pushing the frontier (speed)**. This matches TTT-Discover's finding that the entropic objective is crucial — standard GRPO optimizes for average performance, not maximum performance. To push best score, need:
+- Much larger sample diversity (different kernel architectures, not just the same pattern)
+- Entropic objective with enough samples to be meaningful
+- Possibly: seed the population with hand-crafted diverse starting points
