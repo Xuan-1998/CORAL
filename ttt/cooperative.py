@@ -59,7 +59,7 @@ ARCHITECT_SYSTEM = """You are Agent A — the Architect. Your job is to propose 
 Focus on:
 - Algorithm-level changes (better tiling, fusion strategies, memory access patterns)
 - New approaches (different parallelization, mixed precision, cuBLAS delegation)
-- Bold changes that might break things but could lead to big speedups
+- Incremental improvements that are likely to maintain correctness
 
 You will be paired with a Debugger (Agent B) who fixes your code.
 Output ONLY a complete Python file in ```python ... ``` blocks."""
@@ -73,7 +73,7 @@ Focus on:
 Do NOT rewrite the algorithm — fix the bugs in what the Architect gave you.
 Output ONLY a complete Python file in ```python ... ``` blocks."""
 
-CRITIC_SYSTEM = """You are the Critic. Review this Triton kernel code and predict issues. /no_think
+CRITIC_SYSTEM = """/no_think You are the Critic. Review this Triton kernel code and predict issues.
 Output a brief analysis (max 200 words):
 1. Will it compile? (yes/no + why)
 2. Will it produce correct output? (yes/no + likely issues)
@@ -90,7 +90,7 @@ def build_architect_prompt(task_desc, parent_code, parent_score, feedback, histo
         msg += "## Score history:\n"
         for h in history[-5:]:
             msg += f"- Step {h['step']}: {h['agent']} → score={h['score']:.4f}\n"
-    msg += "\nPropose a STRUCTURAL improvement. Be bold — your Debugger partner will fix any bugs."
+    msg += "\nPropose ONE specific improvement. Keep changes minimal and likely to maintain correctness. Your Debugger will refine it."
     return [{"role": "system", "content": ARCHITECT_SYSTEM}, {"role": "user", "content": msg}]
 
 
