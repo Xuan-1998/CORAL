@@ -130,3 +130,37 @@ The problem is not just "strong models aren't trainable" — it's a **three-way 
 3. **Fix OpenCode integration** — File upstream issues for:
    - Edit tool not writing to actual filesystem in git worktrees
    - Hardcoded max_tokens=32000 (should be configurable or adaptive)
+
+## Round 3: Pipeline Comparison on TriMul Kernel (2026-04-09)
+
+### Setup
+- Qwen3-32B via vLLM (TP=4) on 8×H200
+- TriMul kernel engineering task
+- All pipelines use same model and vLLM instance
+
+### Results
+
+| Pipeline | Steps | Best Score | Runtime (µs) | Evals |
+|---|---|---|---|---|
+| **Single-agent (best-of-4)** | 15 | **0.0916** | 10,917 | ~60 |
+| Cooperative (Architect+Debugger+Critic) | 20 | 0.0000 | — | 40 |
+| Diverse (4 strategies + notebook) | 10 | 0.0000 | — | 40 |
+| Evolutionary (pop=8, crossover) | 40 | 0.0000 | — | 40 |
+
+### Analysis
+
+**Why only single-agent works**: Qwen3-32B generates correct Triton kernels ~6% of the time (1 in 16). The single-agent pipeline samples 4 candidates per step, giving ~22% chance of at least one correct per step. All other approaches sample 1-2 per step with more constrained prompts, reducing success rate to ~0%.
+
+**Key insight**: When model capability is the bottleneck (not search strategy), the best approach is **maximum diversity through random sampling** (high temperature, multiple samples), not structured search. This explains why ThetaEvolve's simple best-of-N baseline is surprisingly strong.
+
+**Implications for TTT**:
+1. RL training should focus on **increasing the base correctness rate** (from 6% to higher)
+2. Once correctness rate is high enough (>50%), search strategies (evolution, cooperation) become useful
+3. The "cooperation" that matters at this stage is not between agents, but between the model and the evaluator feedback loop
+
+### Cooperation Mechanisms Tested
+
+1. **Role splitting (Architect+Debugger)**: Failed. Each agent sees less context, reducing capability below the correctness threshold.
+2. **Strategy diversity (Fusion/Precision/Memory/Hybrid)**: Failed. Constrained prompts reduce diversity compared to random sampling.
+3. **Evolutionary (crossover+mutation)**: Failed. Population of score-0 solutions can't improve through crossover.
+4. **Best-of-N sampling**: Works. Pure randomness + selection pressure is the most effective "cooperation" mechanism when model capability is low.
