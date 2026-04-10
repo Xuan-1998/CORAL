@@ -232,3 +232,47 @@ The problem is not just "strong models aren't trainable" — it's a **three-way 
 | Diverse strategies | ❌ 0/10 | Constrained prompts reduce diversity |
 | Evolutionary (pop=8) | ❌ 0/40 | Can't evolve from all-zero population |
 | Claude distillation | 🔄 blocked by kiro-cli TTY bug | Need remote eval or API key |
+
+## Round 6: Claude CORAL Collection — BREAKTHROUGH (2026-04-10)
+
+### Setup
+- CORAL + kiro-cli (Claude Opus 4.6) on head node
+- Remote GPU eval via SSH to allocated H200 node
+- TriMul kernel engineering task
+
+### Results — Claude's Evolution
+
+| Eval | Score | Runtime (µs) | Strategy |
+|---|---|---|---|
+| 1 | 0.179 | 5577 | Initial PyTorch + basic Triton |
+| 2 | 0.210 | 4757 | FP16 projections |
+| 3 | 0.294 | 3400 | Fused mask+gate kernel |
+| 4 | 0.386 | 2589 | FP16 bmm for matmul |
+| 5 | 0.541 | 1848 | Deeper fusion |
+| 6 | 0.479 | 2087 | (regression, tried different approach) |
+| 7 | **0.780** | **1282** | Full fusion + optimized memory |
+
+### Key Achievement
+- **Claude beat the human best** (1371µs → 1282µs, 6.5% faster)
+- Score 0.780 vs human best ~0.73
+- Achieved in only 7 eval iterations (~2 hours)
+- **No model training** — pure CORAL autonomous agent + iterative search
+
+### Comparison Across All Methods
+
+| Method | Score | Runtime (µs) | Trained? |
+|---|---|---|---|
+| Qwen3-32B best-of-4 | 0.092 | 10,917 | No |
+| Qwen3-32B + GRPO R1 | 0.092 | 10,917 | Yes |
+| **Claude + CORAL** | **0.780** | **1282** | **No** |
+| Human best (GPUMode) | 0.730 | 1371 | — |
+
+### Distillation Data Collected
+- 8+ kernel versions saved to `/fsx/xuanj/claude_distill_data/`
+- Range from naive PyTorch (0.179) to optimized Triton (0.780)
+- Perfect curriculum for distillation: easy → hard progression
+
+### Next: Distillation Pipeline
+1. Use Claude's kernel progression as training data
+2. Fine-tune Qwen3-32B to generate high-quality Triton kernels
+3. Then apply TTT (GRPO) to push beyond Claude's 0.780
