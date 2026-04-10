@@ -200,3 +200,35 @@ The problem is not just "strong models aren't trainable" — it's a **three-way 
 - Much larger sample diversity (different kernel architectures, not just the same pattern)
 - Entropic objective with enough samples to be meaningful
 - Possibly: seed the population with hand-crafted diverse starting points
+
+## Round 5: Claude Sample Collection Attempt (2026-04-10)
+
+### Blocker: kiro-cli crashes on compute nodes
+- "Bad file descriptor (os error 9)" on any non-TTY environment
+- Tried: script pseudo-TTY, stdin=DEVNULL, tmux, updated version (1.27→1.28)
+- Root cause: kiro-cli requires a real terminal, CORAL spawns it as subprocess with redirected stdio
+- Works on head node but head node has no GPU for kernel eval
+
+### Claude's First Kernel Attempt
+- Claude (via kiro-cli on head node) wrote a Triton kernel with fused mask+gate operations
+- But it fails correctness tests (numerical mismatches) — needs iteration to fix
+- Even Claude needs multiple attempts to write correct Triton kernels
+
+### Remaining Path to Distillation
+1. **Fix remote eval**: Modify CORAL grader to SSH to GPU node for eval while agent runs on head node
+2. **Or**: Fix kiro-cli to work in non-TTY mode (upstream bug report)
+3. **Or**: Get Anthropic API key and use pipeline.py directly with Claude API
+4. Once Claude samples collected, distill to Qwen3-32B, then TTT
+
+### Summary of All Experiments
+
+| Experiment | Result | Key Finding |
+|---|---|---|
+| CORAL + kiro (circle packing) | ✅ 0.364 | Claude as agent works |
+| Pipeline + Qwen3-32B (kernel) | ✅ 0.092 | ThetaEvolve-style works |
+| GRPO R1 (binary reward) | ✅ 53%→68% correctness | **TTT improves task-specific capability** |
+| GRPO R2/R3 (speed-focused) | ❌ catastrophic forgetting | Too few samples, wrong reward |
+| Cooperative (Arch+Debug) | ❌ 0/20 | Role splitting hurts |
+| Diverse strategies | ❌ 0/10 | Constrained prompts reduce diversity |
+| Evolutionary (pop=8) | ❌ 0/40 | Can't evolve from all-zero population |
+| Claude distillation | 🔄 blocked by kiro-cli TTY bug | Need remote eval or API key |
