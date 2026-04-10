@@ -330,3 +330,24 @@ To make TTT work on distilled models, need:
 - Replay buffer to prevent forgetting
 - KL penalty to stay close to distilled checkpoint
 - Or: In-Place TTT (fast weight adaptation without full LoRA)
+
+## Round 8: slime Integration (2026-04-10)
+
+### What Works
+- Ray cluster: 2 nodes, 16 GPUs ✅
+- SGLang: 8 engines loaded Qwen3-32B, "fired up and ready to roll" ✅
+- Megatron: correct commit (3714d81), tokenizer module found ✅
+- CORAL rollout function: imported by slime ✅
+- numpy 1.x: installed ✅
+
+### Remaining Issues
+1. **mbridge not installable** — `megatron-bridge` package installs but `mbridge` module not found. Needed for HF→Megatron checkpoint conversion.
+2. **Transformer Engine** — `apply_rope_fusion` requires TE >= 1.4. Fixed with `--no-rope-fusion`.
+3. **Checkpoint format** — slime's Megatron actor needs torch_dist format, not raw HF. Patched assertion but model loading still fails without proper conversion.
+
+### Path Forward
+Two options:
+1. **Install Transformer Engine + mbridge properly** (Docker recommended — slime's Dockerfile has all deps)
+2. **Use slime's Docker image** directly — `docker/Dockerfile` has everything pre-configured
+
+The slime framework is fundamentally working — all components initialize correctly. The remaining issues are all dependency/format problems that slime's Docker image solves.

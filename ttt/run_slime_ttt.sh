@@ -29,6 +29,9 @@ CKPT_ARGS=(
 
 ROLLOUT_ARGS=(
     --rollout-function-path $ROLLOUT_FN
+    --prompt-data /fsx/xuanj/kernel_prompts.jsonl
+    --input-key prompt
+    --label-key label
     --rollout-batch-size 4
     --max-new-tokens 4096
     --temperature 0.8
@@ -37,7 +40,7 @@ ROLLOUT_ARGS=(
 TRAIN_ARGS=(
     --algorithm grpo
     --grpo-group-size 4
-    --kl-penalty-coeff 0.01
+    --kl-penalty-coeff 0.0
     --lr 2e-6
     --train-iters 50 --num-epoch 10 --num-rollout 100
     --micro-batch-size 1
@@ -64,5 +67,5 @@ python train.py \
     --tokenizer-type HuggingFaceTokenizer \
     --tokenizer-model $MODEL_PATH \
     --bf16 \
-    --no-gradient-accumulation-fusion \
+    --no-gradient-accumulation-fusion --no-rope-fusion \
     2>&1 | tee /fsx/xuanj/slime_ttt.log
