@@ -1,266 +1,141 @@
-"""Kernel engineering grader for TriMul — runs Triton kernel benchmarks locally on GPU.
+"""Kernel engineering grader — runs eval on remote GPU node via SSH.
 
-Wraps the eval harness to grade Triton kernel submissions on local GPU hardware.
+Uses shared /fsx filesystem: copies files to a temp dir on /fsx,
+then SSHes to GPU node to run eval.py there.
 """
-
 from __future__ import annotations
-
-import logging
-import math
-import os
-import shutil
-import subprocess
-import tempfile
-import threading
+import logging, math, os, shutil, subprocess, tempfile, threading, json
 from pathlib import Path
 from typing import Any
-
 import yaml
-
 from coral.grader import TaskGrader
 from coral.types import ScoreBundle
 
 logger = logging.getLogger(__name__)
 
+GPU_NODE = os.environ.get("CORAL_GPU_NODE", "p5en-odcr-queue-dy-p5en48xlarge-28")
 
-def _parse_popcorn_output(output: str) -> dict[str, str]:
-    """Parse key-value pairs from the POPCORN_FD output."""
-    results = {}
+def _parse_popcorn(output):
+    r = {}
     for line in output.strip().splitlines():
-        line = line.strip()
         if ":" in line:
-            key, _, value = line.partition(":")
-            results[key.strip()] = value.strip()
-    return results
-
-
-def _compute_geomean(values: list[float]) -> float:
-    """Compute geometric mean of a list of values."""
-    if not values:
-        return 0.0
-    log_sum = sum(math.log(v) for v in values if v > 0)
-    return math.exp(log_sum / len(values))
-
+            k, _, v = line.partition(":")
+            r[k.strip()] = v.strip()
+    return r
 
 class Grader(TaskGrader):
-    """Grader for kernel engineering optimization tasks.
-
-    Runs Triton kernel submissions through the eval harness on local GPU hardware.
-    """
-
     def evaluate(self) -> ScoreBundle:
         task_name = self.args.get("task_name", "trimul")
         timeout = self.timeout
 
         submission_path = os.path.join(self.codebase_path, "submission.py")
         if not os.path.exists(submission_path):
-            return self.fail("submission.py not found in codebase")
+            return self.fail("submission.py not found")
 
-        submission_code = Path(submission_path).read_text()
-        if "custom_kernel" not in submission_code:
-            return self.fail("submission.py must define a 'custom_kernel' function")
+        if "custom_kernel" not in Path(submission_path).read_text():
+            return self.fail("submission.py must define custom_kernel")
 
-        # Load task config from eval/task.yml
-        task_yml_path = self.read_eval_path("task.yml")
-        with open(task_yml_path) as f:
+        task_yml = self.read_eval_path("task.yml")
+        with open(task_yml) as f:
             task_config = yaml.safe_load(f)
 
-        ranking_by = task_config.get("ranking_by", "geom")
-        test_timeout = task_config.get("test_timeout", timeout)
-        ranked_timeout = task_config.get("ranked_timeout", timeout)
-
-        # Run correctness tests first
-        logger.info(f"Running correctness tests for {task_name}...")
-        test_results = self._run_eval(
-            submission_path, mode="test", timeout=test_timeout, ranking_by=ranking_by,
-        )
-
-        if test_results.get("check") != "pass":
-            error = self._extract_test_errors(test_results)
-            return self._make_result(
-                correct=False, timing_us=None,
-                feedback=f"Correctness check failed: {error}",
-            )
-
-        # Run leaderboard benchmarks
-        logger.info(f"Running benchmarks for {task_name}...")
-        bench_results = self._run_eval(
-            submission_path, mode="leaderboard", timeout=ranked_timeout, ranking_by=ranking_by,
-        )
-
-        if bench_results.get("check") != "pass":
-            error = self._extract_test_errors(bench_results)
-            return self._make_result(
-                correct=True, timing_us=None,
-                feedback=f"Benchmark failed: {error}",
-            )
-
-        # Extract timing results
-        timings = self._extract_timings(bench_results)
-        if not timings:
-            return self._make_result(
-                correct=True, timing_us=None,
-                feedback="Benchmarks passed but no timing data found",
-            )
-
-        # Aggregate timings
-        if ranking_by == "last":
-            agg_ns = timings[-1]
-        elif ranking_by == "mean":
-            agg_ns = sum(timings) / len(timings)
-        else:  # "geom" (default)
-            agg_ns = _compute_geomean(timings)
-
-        agg_us = agg_ns / 1000.0
-
-        return self._make_result(
-            correct=True, timing_us=agg_us,
-            feedback=f"Runtime ({ranking_by}): {agg_us:.2f} us across {len(timings)} benchmark(s)",
-        )
-
-    def _run_eval(
-        self,
-        submission_path: str,
-        mode: str = "leaderboard",
-        timeout: int = 1200,
-        ranking_by: str = "geom",
-    ) -> dict[str, str]:
-        """Run the eval harness for a kernel engineering task."""
         eval_dir = Path(self.private_dir) / "eval"
 
-        with tempfile.TemporaryDirectory(prefix="coral_kernel_") as tmpdir:
-            # Copy harness files from eval/
+        # Use /fsx temp dir (shared across nodes)
+        tmpdir = tempfile.mkdtemp(prefix="coral_kernel_", dir="/fsx/xuanj/tmp")
+        try:
             for f in eval_dir.iterdir():
-                if f.name not in ("grader.py", "submission.py"):
-                    if f.is_file():
-                        shutil.copy2(f, tmpdir)
-
-            # Copy agent's submission
+                if f.name != "grader.py" and f.is_file():
+                    shutil.copy2(f, tmpdir)
             shutil.copy2(submission_path, os.path.join(tmpdir, "submission.py"))
 
-            # Build test spec file from task.yml
-            test_spec_path = os.path.join(tmpdir, f"{mode}.txt")
-            self._write_test_specs(eval_dir / "task.yml", mode, test_spec_path, ranking_by)
+            # Write test specs
+            for mode, key in [("test", "tests"), ("leaderboard", "benchmarks")]:
+                specs = task_config.get(key, [])
+                with open(os.path.join(tmpdir, f"{mode}.txt"), "w") as f:
+                    for spec in specs:
+                        f.write("; ".join(f"{k}: {v}" for k, v in spec.items()) + "\n")
 
-            # Run eval.py with POPCORN_FD protocol
-            read_fd, write_fd = os.pipe()
+            # Run correctness on GPU node via SSH
+            logger.info("Running correctness on %s...", GPU_NODE)
+            test_result = self._run_remote(tmpdir, "test", timeout)
 
-            env = os.environ.copy()
-            env["POPCORN_FD"] = str(write_fd)
+            if test_result.get("check") != "pass":
+                error = self._extract_errors(test_result)
+                return self.fail(f"Correctness failed: {error}")
 
-            cmd = ["/usr/bin/python3", "eval.py", mode, f"{mode}.txt"]
-            logger.info(f"Running eval: {' '.join(cmd)} in {tmpdir}")
+            # Run benchmarks
+            logger.info("Running benchmarks on %s...", GPU_NODE)
+            bench_result = self._run_remote(tmpdir, "leaderboard", timeout)
 
-            try:
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=tmpdir,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=env,
-                    pass_fds=(write_fd,),
-                )
-                os.close(write_fd)
-                write_fd = -1
+            timings = []
+            count = int(bench_result.get("benchmark-count", "0"))
+            for i in range(count):
+                mk = f"benchmark.{i}.mean"
+                if mk in bench_result:
+                    timings.append(float(bench_result[mk]))
 
-                popcorn_output: list[str] = []
+            if not timings:
+                return self.fail(f"No timings: {bench_result}")
 
-                def _read_popcorn():
-                    with os.fdopen(read_fd, "r") as f:
-                        popcorn_output.append(f.read())
+            geomean_ns = math.exp(sum(math.log(v) for v in timings) / len(timings))
+            geomean_us = geomean_ns / 1000.0
+            score = 1000.0 / geomean_us
+            return self.score(score, f"Runtime: {geomean_us:.2f} us, score: {score:.4f}")
 
-                reader = threading.Thread(target=_read_popcorn, daemon=True)
-                reader.start()
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
-                stdout, stderr = proc.communicate(timeout=timeout)
-                reader.join(timeout=10)
+    def _run_remote(self, tmpdir, mode, timeout):
+        """Run eval.py on GPU node via SSH, using POPCORN_FD protocol."""
+        # Write a wrapper script that handles POPCORN_FD
+        wrapper = os.path.join(tmpdir, f"run_{mode}.sh")
+        result_file = os.path.join(tmpdir, f"result_{mode}.json")
+        with open(wrapper, "w") as f:
+            f.write(f"""#!/bin/bash
+source /fsx/xuanj/coral-ttt-venv/bin/activate
+cd {tmpdir}
+python3 -c "
+import subprocess, os, threading, json
+r,w = os.pipe()
+env = os.environ.copy()
+env['POPCORN_FD'] = str(w)
+p = subprocess.Popen(['/usr/bin/python3','eval.py','{mode}','{mode}.txt'],
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, pass_fds=(w,))
+os.close(w)
+out = []
+def rd():
+    with os.fdopen(r) as f: out.append(f.read())
+t = threading.Thread(target=rd, daemon=True)
+t.start()
+p.communicate(timeout={timeout})
+t.join(5)
+res = {{}}
+for l in (out[0] if out else '').strip().splitlines():
+    if ':' in l: k,_,v = l.partition(':'); res[k.strip()] = v.strip()
+with open('{result_file}','w') as f: json.dump(res, f)
+"
+""")
+        os.chmod(wrapper, 0o755)
 
-                if stderr:
-                    logger.info(f"Eval stderr: {stderr.decode('utf-8', errors='replace')[:2000]}")
+        try:
+            result = subprocess.run(
+                ["ssh", "-o", "StrictHostKeyChecking=no", GPU_NODE, f"bash {wrapper}"],
+                capture_output=True, text=True, timeout=timeout + 60,
+            )
+            if os.path.exists(result_file):
+                with open(result_file) as f:
+                    return json.load(f)
+            logger.warning("No result file. stderr: %s", result.stderr[:500])
+            return {"check": "fail", "error": result.stderr[:200]}
+        except subprocess.TimeoutExpired:
+            return {"check": "fail", "error": f"Timeout after {timeout}s"}
+        except Exception as e:
+            return {"check": "fail", "error": str(e)}
 
-                return _parse_popcorn_output(popcorn_output[0] if popcorn_output else "")
-
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-                return {"check": "fail", "error": f"Eval timed out after {timeout}s"}
-            except Exception as e:
-                return {"check": "fail", "error": str(e)}
-            finally:
-                if write_fd >= 0:
-                    try:
-                        os.close(write_fd)
-                    except OSError:
-                        pass
-
-    def _write_test_specs(
-        self,
-        task_yml_path: Path,
-        mode: str,
-        output_path: str,
-        ranking_by: str = "geom",
-    ) -> None:
-        """Extract test specs from task.yml and write them for the eval harness."""
-        with open(task_yml_path) as f:
-            task_config = yaml.safe_load(f)
-
-        if mode == "test":
-            specs = task_config.get("tests", [])
-        elif mode in ("benchmark", "leaderboard"):
-            specs = task_config.get("benchmarks", [])
-            if ranking_by == "last" and specs:
-                specs = [specs[-1]]
-        else:
-            specs = task_config.get("tests", [])
-
-        with open(output_path, "w") as f:
-            for spec in specs:
-                parts = [f"{k}: {v}" for k, v in spec.items()]
-                f.write("; ".join(parts) + "\n")
-
-    def _extract_timings(self, results: dict[str, str]) -> list[float]:
-        """Extract mean timings from benchmark results."""
-        timings = []
-        count = int(results.get("benchmark-count", "0"))
-        for i in range(count):
-            mean_key = f"benchmark.{i}.mean"
-            if mean_key in results:
-                try:
-                    timings.append(float(results[mean_key]))
-                except ValueError:
-                    continue
-        return timings
-
-    def _extract_test_errors(self, results: dict[str, str]) -> str:
-        """Extract error messages from test results."""
+    def _extract_errors(self, results):
         errors = []
-        for key, value in results.items():
-            if key.endswith(".error"):
-                errors.append(value)
-            elif key.endswith(".status") and value == "fail":
-                idx = key.split(".")[1]
-                spec = results.get(
-                    f"test.{idx}.spec",
-                    results.get(f"benchmark.{idx}.spec", ""),
-                )
-                errors.append(f"Failed on: {spec}")
-        if errors:
-            return "; ".join(errors[:3])
-        return results.get("error", "Unknown error")
-
-    def _make_result(
-        self,
-        correct: bool,
-        timing_us: float | None,
-        feedback: str,
-    ) -> ScoreBundle:
-        """Create a ScoreBundle from eval results.
-
-        Score is: 1000 / timing_us (higher is better, lower time = higher score).
-        If incorrect, score is 0.
-        """
-        if not correct or timing_us is None:
-            return self.fail(feedback)
-
-        score_value = 1000.0 / timing_us if timing_us > 0 else 0.0
-        return self.score(score_value, feedback)
+        for k, v in results.items():
+            if k.endswith(".error"):
+                errors.append(v)
+        return "; ".join(errors[:3]) if errors else results.get("error", "Unknown")
