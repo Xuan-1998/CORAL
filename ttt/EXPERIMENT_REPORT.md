@@ -276,3 +276,30 @@ The problem is not just "strong models aren't trainable" — it's a **three-way 
 1. Use Claude's kernel progression as training data
 2. Fine-tune Qwen3-32B to generate high-quality Triton kernels
 3. Then apply TTT (GRPO) to push beyond Claude's 0.780
+
+## Round 7: Distillation Results (2026-04-10)
+
+### Distillation Setup
+- Teacher: Claude Opus 4.6 kernels (7 versions, scores 0→0.817)
+- Student: Qwen3-32B with LoRA (r=32, targets=q/k/v/o_proj)
+- Training: 3 epochs, weighted SFT (exp(3*score) weighting)
+- Top kernel gets 27% of weight, bottom gets 0.2%
+
+### Results
+
+| Model | Best Score | Runtime (µs) | Correctness | Improvement |
+|---|---|---|---|---|
+| Base Qwen3-32B | 0.092 | 10,917 | 53% | baseline |
+| GRPO R1 (TTT) | 0.092 | 10,917 | 68% | correctness↑ |
+| **Distilled Qwen3-32B** | **0.179** | **5,578** | 10% | **score 2x↑** |
+| Claude+CORAL | 0.817 | 1,228 | — | teacher |
+
+### Analysis
+- **Distillation doubled the best score** (0.092 → 0.179) and halved runtime (11000 → 5578µs)
+- The distilled model learned Claude's FP16+bmm strategy
+- But correctness rate dropped (53% → 10%) — model overfitted to Claude's code style
+- The correct kernels are much higher quality than base model's
+
+### Next: TTT on Distilled Model
+- GRPO on the distilled model to recover correctness while keeping high score
+- This is the full pipeline: Claude → Distill → TTT
