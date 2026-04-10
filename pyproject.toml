@@ -40,7 +40,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ttt = [
-    "rllm[tinker] @ git+https://github.com/rllm-org/rllm.git",
+    "rllm[verl] @ git+https://github.com/rllm-org/rllm.git",
 ]
 dev = [
     "pytest>=8.0.0",
