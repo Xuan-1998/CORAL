@@ -303,3 +303,30 @@ The problem is not just "strong models aren't trainable" — it's a **three-way 
 ### Next: TTT on Distilled Model
 - GRPO on the distilled model to recover correctness while keeping high score
 - This is the full pipeline: Claude → Distill → TTT
+
+## Final Results Summary (2026-04-10)
+
+| Model | Correctness | Best Score | Runtime (µs) | Method |
+|---|---|---|---|---|
+| Base Qwen3-32B | 53% (37/70) | 0.092 | 10,917 | best-of-4 sampling |
+| + GRPO R1 | **68%** (27/40) | 0.092 | 10,917 | binary reward TTT |
+| + Distillation | 10% (4/40) | **0.179** | **5,578** | Claude SFT |
+| + Distill + GRPO | 0% (0/18) | 0.000 | — | catastrophic forgetting |
+| Claude + CORAL | — | **0.817** | **1,228** | frozen agent, no training |
+| TTT-Discover (paper) | — | 0.861 | 1,161 | gpt-oss-120B + entropic RL |
+
+### Key Findings
+
+1. **TTT improves task-specific correctness** (53%→68%) — validated
+2. **Distillation improves kernel quality** (0.092→0.179, 2x) — validated
+3. **GRPO on small samples causes catastrophic forgetting** — consistent across R1→R2, R2→R3, Distill→GRPO
+4. **Claude+CORAL (frozen) beats human best** on TriMul (1228µs vs 1371µs)
+5. **Model capability >> framework design** — best-of-N beats all cooperative/evolutionary methods
+
+### The Fundamental Challenge
+GRPO with <20 samples and 1-3 epochs consistently destroys model capability.
+To make TTT work on distilled models, need:
+- Much larger sample collection (100+ diverse kernels)
+- Replay buffer to prevent forgetting
+- KL penalty to stay close to distilled checkpoint
+- Or: In-Place TTT (fast weight adaptation without full LoRA)
