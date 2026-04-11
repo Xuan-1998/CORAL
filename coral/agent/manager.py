@@ -226,7 +226,12 @@ class AgentManager:
 
         # Set up shared state directory (notes, skills, attempts symlinks)
         shared_dir_name = self.runtime.shared_dir_name
-        setup_shared_state(worktree_path, self.paths.coral_dir, shared_dir_name)
+        setup_shared_state(
+            worktree_path, self.paths.coral_dir, shared_dir_name,
+            share_notes=self.config.sharing.notes,
+            share_skills=self.config.sharing.skills,
+            share_attempts=self.config.sharing.attempts,
+        )
 
         # Register agent with gateway if active (before settings so we have the key)
         if self._gateway and agent_id not in self._gateway_keys:

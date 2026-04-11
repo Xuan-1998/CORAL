@@ -1,0 +1,40 @@
+# Exp C: 4 agents, NO knowledge sharing (no notes, no skills, but shared attempts)
+task:
+  name: "Circle Packing - 4Agent AttemptsOnly"
+  description: |
+    Pack N = 26 circles into a unit square (side length 1) to maximize the sum of radii.
+    Find positions (x_i, y_i) and radii r_i for i = 1..N such that:
+      1. x_i - r_i >= 0 and x_i + r_i <= 1
+      2. y_i - r_i >= 0 and y_i + r_i <= 1
+      3. sqrt((x_i - x_j)^2 + (y_i - y_j)^2) >= r_i + r_j for all i != j
+      4. sum(r_i) is maximized
+    Your program file `initial_program.py` must define a `run()` function that returns
+    (centers, radii, sum_radii).
+    Score = your_sum_radii / 2.635977.
+  tips: |
+    - Eval timeout is 600s.
+    - numpy and scipy are always available.
+    - Best known sum of radii for N=26 is 2.635977.
+
+grader:
+  timeout: 600
+  direction: maximize
+  args:
+    program_file: "initial_program.py"
+
+agents:
+  count: 4
+  runtime: claude_code
+  model: claude-sonnet-4-6
+  max_turns: 200
+
+sharing:
+  attempts: true
+  notes: false
+  skills: false
+
+workspace:
+  results_dir: "./results/ablation"
+  repo_path: "./examples/math/circle_packing/seed"
+  setup:
+    - "uv sync"

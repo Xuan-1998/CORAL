@@ -120,16 +120,30 @@ def get_coral_dir(worktree_path: Path) -> Path | None:
     return None
 
 
-def setup_shared_state(worktree_path: Path, coral_dir: Path, shared_dir_name: str = ".claude") -> None:
+def setup_shared_state(
+    worktree_path: Path,
+    coral_dir: Path,
+    shared_dir_name: str = ".claude",
+    share_notes: bool = True,
+    share_skills: bool = True,
+    share_attempts: bool = True,
+) -> None:
     """Create a shared state directory in the worktree with symlinks to .coral/public/.
 
     Symlinks notes, skills, attempts, and logs from .coral/public/ into
     the shared directory so agents can read/write shared state.
 
+    When share_notes/skills/attempts is False, the corresponding directory
+    is created as a local (non-shared) directory instead of a symlink,
+    isolating that agent from other agents' knowledge.
+
     Args:
         worktree_path: Path to the agent's git worktree
         coral_dir: Path to the shared .coral directory
-        shared_dir_name: Name of the shared dir in the worktree (e.g. ".claude", ".codex", ".opencode")
+        shared_dir_name: Name of the shared dir in the worktree
+        share_notes: If False, agent gets a private notes dir
+        share_skills: If False, agent gets a private skills dir
+        share_attempts: If False, agent gets a private attempts dir
     """
     coral_public = coral_dir / "public"
 
@@ -141,23 +155,29 @@ def setup_shared_state(worktree_path: Path, coral_dir: Path, shared_dir_name: st
 
     shared_dir.mkdir(exist_ok=True)
 
-    # Symlink shared content from .coral/public/
-    shared_items = [
-        "notes",
-        "skills",
-        "attempts",
-        "logs",
-        "heartbeat",
-    ]
-    for item in shared_items:
+    # Map items to their sharing flag
+    item_sharing = {
+        "notes": share_notes,
+        "skills": share_skills,
+        "attempts": share_attempts,
+        "logs": True,       # always shared
+        "heartbeat": True,  # always shared
+    }
+
+    for item, shared in item_sharing.items():
         src = coral_public / item
         dst = shared_dir / item
-        if not dst.exists() and not dst.is_symlink():
+        if dst.exists() or dst.is_symlink():
+            continue
+        if shared:
             try:
                 rel = os.path.relpath(src.resolve(), shared_dir.resolve())
                 dst.symlink_to(rel)
             except (ValueError, OSError):
                 dst.symlink_to(src.resolve())
+        else:
+            # Create a local (private) directory — no symlink to shared state
+            dst.mkdir(parents=True, exist_ok=True)
 
 
 def setup_claude_settings(
