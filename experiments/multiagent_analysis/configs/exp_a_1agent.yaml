@@ -25,8 +25,8 @@ grader:
 
 agents:
   count: 1
-  runtime: claude_code
-  model: claude-sonnet-4-6
+  runtime: kiro
+  model: auto
   max_turns: 200
 
 workspace:
