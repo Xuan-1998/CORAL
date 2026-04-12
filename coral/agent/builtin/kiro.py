@@ -14,6 +14,9 @@ from coral.workspace.repo import _clean_env
 
 logger = logging.getLogger(__name__)
 
+# kiro-cli has a max prompt length via CLI args; use stdin for long prompts
+_MAX_ARG_LEN = 100_000
+
 
 class KiroRuntime:
     """Spawn and manage Kiro CLI agent subprocesses."""
@@ -27,7 +30,7 @@ class KiroRuntime:
         return ".kiro"
 
     def extract_session_id(self, log_path: Path) -> str | None:
-        return None  # Kiro doesn't expose session IDs in the same way
+        return None
 
     def start(
         self,
@@ -43,6 +46,8 @@ class KiroRuntime:
         prompt_source: str | None = None,
         task_name: str | None = None,
         task_description: str | None = None,
+        gateway_url: str | None = None,
+        gateway_api_key: str | None = None,
     ) -> AgentHandle:
         agent_id_file = worktree_path / ".coral_agent_id"
         agent_id = agent_id_file.read_text().strip() if agent_id_file.exists() else "unknown"
@@ -54,21 +59,29 @@ class KiroRuntime:
         log_idx = len(list(log_dir.glob(f"{agent_id}*.log")))
         log_path = log_dir / f"{agent_id}.{log_idx}.log"
 
+        # Unlike Claude Code, kiro-cli does NOT auto-read KIRO.md from the
+        # worktree. We must prepend the instruction file content to every prompt
+        # so the agent always has full task context.
+        instructions = ""
+        if coral_md_path.exists():
+            instructions = coral_md_path.read_text()
+
         if prompt is None:
-            prompt = "Begin."
+            prompt = "Begin. Read the instructions above carefully, then start working."
+
+        full_prompt = f"{instructions}\n\n---\n\n{prompt}" if instructions else prompt
 
         cmd = [
             "kiro-cli", "chat",
-            prompt,
+            full_prompt,
             "--no-interactive",
-            "-a",  # trust all tools
+            "-a",
         ]
 
         if model and model != "default":
             cmd.extend(["--model", model])
 
         logger.info(f"Starting Kiro agent {agent_id} in {worktree_path}")
-        logger.info(f"Command: {' '.join(cmd)}")
 
         agent_env = _clean_env()
 
@@ -76,7 +89,7 @@ class KiroRuntime:
 
         write_coral_log_entry(
             log_file,
-            prompt=prompt,
+            prompt=prompt,  # log the short prompt, not the full one
             source=prompt_source or "start",
             agent_id=agent_id,
             task_name=task_name,
