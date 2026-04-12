@@ -42,6 +42,18 @@ TASKS = {
         "benchmark": 1.0,
         "thresholds": [0.5, 0.7, 0.9, 0.95, 1.0],
     },
+    "hexagon_12": {
+        "dir": "results/ablation_hexagon12",
+        "direction": "maximize",
+        "benchmark": 1.0,
+        "thresholds": [0.3, 0.5, 0.7, 0.9, 1.0],
+    },
+    "matmul": {
+        "dir": "results/ablation_matmul",
+        "direction": "maximize",
+        "benchmark": 1.0,
+        "thresholds": [0.3, 0.5, 0.7, 0.9, 1.0],
+    },
 }
 
 CONDITIONS = ["1agent_baseline", "4agent_coevol", "4agent_attempts_only", "4agent_no_sharing"]

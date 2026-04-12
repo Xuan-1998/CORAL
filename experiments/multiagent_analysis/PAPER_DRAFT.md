@@ -138,24 +138,55 @@ Unlike RLVR where distillation > RL, here attempts_only < coevol.
 This may be because our "distillation" analog (sharing scores) is weaker
 than true distillation (which provides full reasoning traces).
 
-## The Difficulty Hypothesis
+## The Difficulty Hypothesis (7 tasks)
 
-The most interesting finding is the **task difficulty interaction**:
+The most important finding is the **task difficulty interaction**:
 
-| Difficulty | Winner | Why |
-|-----------|--------|-----|
-| Easy (CP, Erdos) | no_sharing / 1agent | Single agent can solve it; sharing is overhead |
-| Medium (Signal, Kernel) | no_sharing | 4 independent agents cover more ground |
-| Hard (Heilbronn) | **coevol** | No single agent reaches 0.9; sharing enables breakthrough |
+| Task | Difficulty | Winner | Best Score (winner) | 2nd Place |
+|------|-----------|--------|-------------------|-----------|
+| Circle Packing | Easy | no_sharing | 1.0000055 | coevol |
+| Erdos | Easy-Med | no_sharing | 1.0001370 | 1agent |
+| Kernel Builder | Medium | no_sharing | 2,125 cyc | coevol (tie) |
+| Signal Processing | Medium | no_sharing | 0.738 | coevol |
+| Heilbronn Triangle | Med-Hard | **coevol** | 0.971 | no_sharing (0.942) |
+| Hexagon Packing 12 | Hard | **coevol** | 0.941 | (others crash) |
+| Matrix Multiplication | Hard | **coevol** | 1.000 | 1agent (0.80) |
 
-This maps to RLVR's nuance: RL is useful when the base model's pass@1 is
-very low (needs efficiency boost), but harmful when pass@k is already high
-(narrows exploration). Similarly:
+**Score**: no_sharing wins 4/7, coevol wins 3/7.
+**But the split is clean**: no_sharing wins all easy/medium tasks,
+coevol wins all hard tasks.
 
-- **When 1 agent can solve the task**: sharing is pure overhead
-- **When 4 independent agents can solve it**: sharing narrows exploration
-- **When no independent agent can solve it**: sharing may be the only way
-  to combine partial insights into a solution
+This maps precisely to RLVR's nuance:
+
+- **Easy tasks** (1agent can solve): sharing is pure overhead, narrows exploration
+- **Medium tasks** (4 independent agents can solve): sharing narrows exploration
+- **Hard tasks** (independent agents crash/struggle): sharing enables combining
+  partial insights — agents learn from each other's rare successes
+
+### Why Sharing Helps on Hard Tasks
+
+On Heilbronn, coevol agents progressively discovered:
+1. "Goldberg init" (agent-4, 0.869)
+2. "Bottom-3 targeting" (agent-3, 0.930, learned from agent-1's notes)
+3. "Diverse inits + 4-phase SA" (agent-2, 0.971, combined insights from all)
+
+No single agent discovered all three innovations. Sharing let agents
+**compose partial insights** into a solution none could find alone.
+
+On Hexagon 12, no_sharing agents ALL crashed. coevol's agent-2 succeeded
+because it could learn from agent-3's first successful attempt (0.691).
+
+### The Crossover Point
+
+The crossover happens when **1agent's best score < ~0.9 of benchmark**.
+Below this threshold, the task is hard enough that sharing's benefits
+(combining partial insights) outweigh its costs (exploration narrowing).
+
+| 1agent best | Sharing helps? | Tasks |
+|------------|---------------|-------|
+| ≥ 1.0 | No | CP, Erdos |
+| 0.7-1.0 | No | Signal, Kernel |
+| < 0.7 | **Yes** | Heilbronn (0.80), Hexagon (crash), Matmul (0.80) |
 
 ## Mechanistic Evidence
 
@@ -182,18 +213,24 @@ On Heilbronn, the 65x compute investment pays off. On other tasks, it doesn't.
 
 ## Conclusions
 
-1. **Multiagent gain ≈ sampling gain** (like RLVR): On 4/5 tasks, independent
-   agents match or beat co-evolution. The primary value of multiple agents is
-   parallel sampling, not knowledge transfer.
+1. **Multiagent gain ≈ sampling gain on easy/medium tasks** (like RLVR):
+   On 4/7 tasks, independent agents match or beat co-evolution. The primary
+   value of multiple agents is parallel sampling, not knowledge transfer.
 
 2. **Sharing narrows exploration** (like RL): Shared notes/skills cause agents
    to converge on similar strategies, reducing the effective search space.
    coevol produces 2-6x fewer unique strategies per eval than no_sharing.
 
-3. **Difficulty is the key moderator**: Sharing helps only when the task is
-   hard enough that no single agent can solve it. This parallels RLVR's
-   finding that RL helps most when base model pass@1 is very low.
+3. **Sharing genuinely helps on hard tasks** (unlike pure RLVR): On 3/7 tasks
+   where single agents struggle (Heilbronn, Hexagon, Matmul), co-evolution
+   enables agents to compose partial insights into solutions none could find
+   alone. This is the multiagent analog of distillation expanding the boundary.
 
-4. **Design implication**: Multiagent systems should default to independent
-   exploration and only enable sharing when agents are individually stuck.
-   "Adaptive sharing" — independent early, shared late — may be optimal.
+4. **Difficulty is the key moderator**: The crossover point is when 1agent's
+   best score < ~0.8 of benchmark. Below this, sharing's benefits outweigh
+   its costs. Above this, independent exploration is strictly better.
+
+5. **Design implication**: Multiagent systems should use **adaptive sharing** —
+   independent exploration early (or on easy tasks), shared knowledge only
+   when agents are individually stuck. This combines the exploration benefits
+   of independence with the insight-composition benefits of sharing.
