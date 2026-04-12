@@ -141,6 +141,34 @@ with 21 evals still hasn't caught up. no_sharing outperforms coevol.
 
 Co-evolution is consistently the least efficient condition across both tasks.
 
+### Temporal Analysis: When Does Sharing Help?
+
+Cross-agent code transfer only appears in the late phase of optimization,
+but by then improvement rates have collapsed:
+
+| Task | Phase | Cross-Agent % | Improvement Rate |
+|------|-------|--------------|-----------------|
+| Circle Packing | Early (Q1) | 0% | 69% |
+| Circle Packing | Late (Q4) | 42% | 4% |
+| Erdos | Early (Q1) | 0% | 93% |
+| Erdos | Late (Q4) | 45% | 43% |
+
+Agents start referencing each other's code heavily in the late phase, but
+these references rarely lead to improvements. This mirrors RLVR's finding
+that RL concentrates probability on known rewarded paths that have already
+been fully explored.
+
+### Technique Convergence (Erdos)
+
+| Condition | Technique Overlap (Jaccard) |
+|-----------|---------------------------|
+| coevol | 0.700 (more convergent) |
+| no_sharing | 0.655 (more diverse) |
+
+Shared notes/skills cause agents to converge on similar optimization
+techniques (Adam + perturbation in Erdos), while independent agents
+discover more diverse approaches (multi-resolution, Haugland initialization).
+
 ## Next Steps
 
 1. **Difficulty scaling**: Test on tasks of varying difficulty to find the
