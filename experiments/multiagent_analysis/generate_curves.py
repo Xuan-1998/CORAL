@@ -43,7 +43,34 @@ tasks = {
     "erdos": {
         "1agent": "results/ablation_erdos/1agent_baseline",
         "4agent_coevol": "results/ablation_erdos/4agent_coevol",
+        "4agent_attempts_only": "results/ablation_erdos/4agent_attempts_only",
         "4agent_no_sharing": "results/ablation_erdos/4agent_no_sharing",
+    },
+    "kernel_builder": {
+        "1agent": "results/ablation_kernel/1agent_baseline",
+        "4agent_coevol": "results/ablation_kernel/4agent_coevol",
+        "4agent_no_sharing": "results/ablation_kernel/4agent_no_sharing",
+    },
+    "heilbronn": {
+        "1agent": "results/ablation_heilbronn/1agent_baseline",
+        "4agent_coevol": "results/ablation_heilbronn/4agent_coevol",
+        "4agent_attempts_only": "results/ablation_heilbronn/4agent_attempts_only",
+        "4agent_no_sharing": "results/ablation_heilbronn/4agent_no_sharing",
+    },
+    "signal": {
+        "1agent": "results/ablation_signal/1agent_baseline",
+        "4agent_coevol": "results/ablation_signal/4agent_coevol",
+        "4agent_attempts_only": "results/ablation_signal/4agent_attempts_only",
+        "4agent_no_sharing": "results/ablation_signal/4agent_no_sharing",
+    },
+    "hexagon_12": {
+        "4agent_coevol": "results/ablation_hexagon12/4agent_coevol",
+        "4agent_no_sharing": "results/ablation_hexagon12/4agent_no_sharing",
+    },
+    "matmul": {
+        "1agent": "results/ablation_matmul/1agent_baseline",
+        "4agent_coevol": "results/ablation_matmul/4agent_coevol",
+        "4agent_no_sharing": "results/ablation_matmul/4agent_no_sharing",
     },
 }
 
