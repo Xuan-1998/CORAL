@@ -188,6 +188,31 @@ Below this threshold, the task is hard enough that sharing's benefits
 | 0.7-1.0 | No | Signal, Kernel |
 | < 0.7 | **Yes** | Heilbronn (0.80), Hexagon (crash), Matmul (0.80) |
 
+### Key Divergence from RLVR
+
+RLVR found: "RL wins at small k, base wins at large k" (RL = efficiency, base = boundary).
+
+We find the **opposite pattern on hard tasks**: "no_sharing wins at small k,
+coevol wins at large k."
+
+| Task | k=5 winner | k=20 winner | k=all winner |
+|------|-----------|------------|-------------|
+| CP (easy) | 1agent | tie | no_sharing |
+| Erdos (easy) | 1agent | 1agent | no_sharing |
+| Heilbronn (hard) | no_sharing | no_sharing | **coevol** |
+| Matmul (hard) | tie | tie | **coevol** |
+
+This means multiagent sharing is NOT equivalent to RL:
+- **RL narrows** the solution space (good at small k, bad at large k)
+- **Multiagent sharing expands** the solution space on hard tasks
+  (bad at small k due to overhead, good at large k by composing insights)
+
+On easy tasks, sharing behaves like RL (narrows exploration).
+On hard tasks, sharing behaves like **distillation** (expands boundary).
+
+This is the central insight: **the same sharing mechanism acts as RL-like
+narrowing or distillation-like expansion depending on task difficulty.**
+
 ## Mechanistic Evidence
 
 ### Strategy Anchoring (from agent notes on Erdos)
