@@ -114,15 +114,40 @@ can solve it in 17 evals. The value of shared knowledge likely increases
 with task complexity, similar to how distillation (vs RL) becomes more
 valuable for harder problems.
 
+## Cross-Task Validation: Erdos Minimum Overlap
+
+To verify findings aren't task-specific, we ran the same ablation on Erdos
+Minimum Overlap (minimize C5 upper bound, benchmark=0.38092).
+
+### Erdos Results (~40 min)
+
+| Condition | Evals | Best Score | Improvement Rate |
+|-----------|-------|-----------|-----------------|
+| 1agent | 3 | 0.99999 | 100% |
+| 4agent_coevol | 21 | 0.99842 | 71.4% |
+| 4agent_no_sharing | 22 | 0.99991 | 81.8% |
+
+**Same pattern**: 1agent reaches near-benchmark in just 3 evals. Co-evolution
+with 21 evals still hasn't caught up. no_sharing outperforms coevol.
+
+### Cross-Task Consistency
+
+| Metric | Circle Packing | Erdos |
+|--------|---------------|-------|
+| Most efficient | no_sharing (50.7%) | 1agent (100%) |
+| Least efficient | coevol (33.5%) | coevol (71.4%) |
+| Fastest to benchmark | no_sharing (14 evals) | 1agent (3 evals) |
+| Slowest to benchmark | coevol (261 evals) | coevol (not reached) |
+
+Co-evolution is consistently the least efficient condition across both tasks.
+
 ## Next Steps
 
-1. **Cross-task validation**: Run same ablation on Erdos Minimum Overlap
-   (harder task, currently running)
-2. **Difficulty scaling**: Test on tasks of varying difficulty to find the
+1. **Difficulty scaling**: Test on tasks of varying difficulty to find the
    crossover point where sharing starts helping
-3. **Temporal analysis**: Track when cross-agent transfer becomes beneficial
+2. **Temporal analysis**: Track when cross-agent transfer becomes beneficial
    (early vs late in the optimization trajectory)
-4. **Knowledge quality**: Analyze whether the content of shared notes/skills
+3. **Knowledge quality**: Analyze whether the content of shared notes/skills
    is actually useful or just noise
 
 ## Code
