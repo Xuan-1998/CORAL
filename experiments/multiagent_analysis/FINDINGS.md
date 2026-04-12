@@ -207,6 +207,76 @@ discover more diverse approaches (multi-resolution, Haugland initialization).
 3. **Knowledge quality**: Analyze whether the content of shared notes/skills
    is actually useful or just noise
 
+## Mechanistic Analysis: WHY Does Sharing Hurt?
+
+### The Attention Tax
+
+Sharing doesn't slow agents down — it speeds them up. coevol agents produce
+19.7 evals/agent/h vs no_sharing's 3.8/agent/h (Circle Packing). But this
+high velocity is low quality: 95% of coevol's strategies are redundant.
+
+Agents reading shared notes skip the deep research phase and jump straight
+to copying others' approaches. This produces more evals but less exploration.
+
+### Strategy Anchoring (from actual agent notes)
+
+Reading coevol agents' notes on Erdos reveals the mechanism:
+
+- Agent-1 (eval 6): "Adopted agent-3's params" → timeout
+- Agent-1 (eval 17): "Adopted agent-4's momentum PG approach" → marginal gain
+- Agent-1 (eval 33): "All agents converge to C5 ≈ 0.38101-0.38108" → **explicit acknowledgment of convergence**
+- Agent-2 (eval 15): tried different method, regressed, went back to copying
+
+All 4 coevol agents converged to the same local optimum (C5 ≈ 0.381).
+Meanwhile, no_sharing agents independently discovered Haugland initialization
+and reached C5 ≈ 0.3808 (exceeding benchmark).
+
+### The Redundancy Problem
+
+| Condition | Unique strategies | Redundancy | Cross-agent duplication |
+|-----------|------------------|-----------|----------------------|
+| coevol (CP) | 25/545 | 95% | 85% |
+| no_sharing (CP) | 35/103 | 66% | 78% |
+| coevol (Erdos) | 14/155 | 91% | 74% |
+| no_sharing (Erdos) | 48/109 | 56% | 64% |
+
+### Compute-Normalized Comparison
+
+At equal compute budget:
+
+**Erdos**: coevol uses 21x more evals than 1agent but scores LOWER
+(0.99975 vs 1.00013). More compute, worse result.
+
+**Circle Packing**: coevol uses 15x more evals for 0.0004% improvement.
+
+### Cross-Agent Transfer: Helpful but Rare
+
+On Circle Packing, cross-agent transfers (building on another agent's commit)
+have 69% improvement rate vs 36% for self-parent attempts. But cross-agent
+transfers are only 10% of all attempts. The net effect: sharing makes the
+rare cross-agent transfers better but makes the common self-improvements worse.
+
+## Implications for Multiagent System Design
+
+1. **Default to independent exploration** for well-defined optimization tasks
+2. **Share scores/rankings only** (like a leaderboard) — this gives agents
+   signal about what score levels are achievable without anchoring their strategy
+3. **Delay sharing** until agents have independently explored — early sharing
+   causes premature convergence
+4. **Share "what doesn't work" more than "what works"** — negative knowledge
+   expands the search space, positive knowledge narrows it
+5. **Stronger models need less sharing** — opus 4.6 single agent outperforms
+   4 co-evolving agents on both tasks
+
+## Next Steps
+
+1. **Difficulty scaling**: Test on tasks of varying difficulty to find the
+   crossover point where sharing starts helping
+2. **Temporal analysis**: Track when cross-agent transfer becomes beneficial
+   (early vs late in the optimization trajectory)
+3. **Knowledge quality**: Analyze whether the content of shared notes/skills
+   is actually useful or just noise
+
 ## Code
 
 All experiment code is in `experiments/multiagent_analysis/`:
