@@ -119,16 +119,26 @@ valuable for harder problems.
 To verify findings aren't task-specific, we ran the same ablation on Erdos
 Minimum Overlap (minimize C5 upper bound, benchmark=0.38092).
 
-### Erdos Results (~40 min)
+### Erdos Results (~2 hours, 175+ evals for coevol)
 
 | Condition | Evals | Best Score | Improvement Rate |
 |-----------|-------|-----------|-----------------|
-| 1agent | 3 | 0.99999 | 100% |
-| 4agent_coevol | 21 | 0.99842 | 71.4% |
-| 4agent_no_sharing | 22 | 0.99991 | 81.8% |
+| 1agent | 18 | 0.99999 | 44% |
+| 4agent_coevol | 175 | 0.99897 | 77% |
+| 4agent_no_sharing | 41 | 0.99999+ | 73% |
 
-**Same pattern**: 1agent reaches near-benchmark in just 3 evals. Co-evolution
-with 21 evals still hasn't caught up. no_sharing outperforms coevol.
+Evals to reach threshold:
+
+| Threshold | 1agent | coevol | no_sharing |
+|-----------|--------|--------|------------|
+| 0.99 | 3 | 26 | 4 |
+| 0.999 | 5 | **never** (175 evals) | 13 |
+| 0.9999 | 5 | **never** | 20 |
+
+**Erdos shows an even stronger effect**: coevol with 175 evals cannot reach
+0.999, while 1agent reaches 0.9999 in just 5 evals. The 4 co-evolving agents
+all converged on Adam + perturbation strategies and got stuck at 0.999, while
+independent agents discovered multi-resolution approaches reaching 0.99999+.
 
 ### Cross-Task Consistency
 
