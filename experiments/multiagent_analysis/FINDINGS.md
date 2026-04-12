@@ -14,7 +14,9 @@ genuinely expand the capability boundary (like distillation)?
 
 ## Experimental Setup
 
-**Task**: Circle Packing (N=26, maximize sum of radii, benchmark=2.635977)
+**Tasks**: Circle Packing (N=26), Erdos Minimum Overlap
+
+**Model**: Claude Opus 4.6 (matching CORAL paper's setup)
 
 **Conditions** (all using kiro-cli as agent runtime):
 
@@ -25,37 +27,54 @@ genuinely expand the capability boundary (like distillation)?
 | 4agent_attempts_only | 4 | ✓ | ✗ |
 | 4agent_no_sharing | 4 | ✗ | ✗ |
 
-**Infrastructure**: CORAL framework with modified `SharingConfig` to control
-per-item sharing. Ran on p5en cluster for ~9 hours.
+**Infrastructure**: CORAL framework with modified `SharingConfig`. Ran on p5en cluster, 9+ hours per run.
 
 ## Key Results
 
-### 1. Convergence Speed
+### 1. Convergence Speed (Opus 4.6)
 
 Evals needed to reach score thresholds:
 
+**Circle Packing**:
+
 | Threshold | 1agent | coevol | attempts_only | no_sharing |
 |-----------|--------|--------|--------------|------------|
-| 0.99 | 15 | 26 | 16 | **2** |
-| 0.999 | 17 | 106 | 36 | **6** |
-| 1.0 | **17** | 261 | 516 | **14** |
+| 0.99 | **5** | 6 | 11 | 4 |
+| 0.999 | **5** | 131 | 111 | **7** |
+| 1.0 | **11** | **never** (525 evals) | 111 | **14** |
 
-**Finding**: Independent agents (no_sharing) converge 18x faster than
-co-evolution to reach the benchmark. Even a single agent reaches 1.0 in
-17 evals — faster than 4 co-evolving agents (261 evals).
+**Erdos**:
 
-### 2. Final Scores (after ~9 hours)
+| Threshold | 1agent | coevol | no_sharing |
+|-----------|--------|--------|------------|
+| 0.99 | **3** | 6 | 2 |
+| 0.999 | **5** | 46 | 11 |
+| 1.0 | **5** | **never** (205 evals) | 94 |
+
+**Finding**: coevol NEVER reaches 1.0 on Circle Packing (525 evals) or Erdos
+(205 evals). 1agent reaches 1.0 in 11 and 5 evals respectively.
+
+### 2. Final Scores (Opus 4.6, ~9 hours)
+
+**Circle Packing**:
 
 | Condition | Total Evals | Best Score | Improvement Rate |
 |-----------|------------|-----------|-----------------|
-| 1agent_baseline | 56 | 1.0000004 | 53.6% |
-| 4agent_coevol | 645 | 1.0000023 | 40.3% |
-| 4agent_attempts_only | 640 | 1.0000025 | 39.1% |
-| 4agent_no_sharing | 141 | 1.0000024 | 54.6% |
+| 1agent | 30 | 1.0000004 | 50% |
+| coevol | 525 | 0.9999999 | 42% |
+| attempts_only | 430 | 1.0000025 | 49% |
+| no_sharing | 100 | **1.0000055** | **67%** |
 
-**Finding**: All conditions eventually reach similar final scores (~1.000002),
-but with vastly different efficiency. no_sharing achieves this with 141 evals
-while coevol needs 645 — a 4.6x overhead.
+**Erdos**:
+
+| Condition | Total Evals | Best Score | Improvement Rate |
+|-----------|------------|-----------|-----------------|
+| 1agent | 10 | **1.0001253** | 100% |
+| coevol | 205 | 0.9997547 | 35% |
+| no_sharing | 94 | 1.0001253 | 40% |
+
+**Finding**: 1agent opus exceeds the Erdos benchmark in just 5 evals.
+coevol with 205 evals cannot even reach 0.999.
 
 ### 3. Exploration Diversity
 
