@@ -22,6 +22,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV UV_BREAK_SYSTEM_PACKAGES=1
 
+# Save base image torch version before any pip installs can upgrade it
+RUN python3 -c "import torch; print(torch.__version__)" > /tmp/torch_ver.txt 2>/dev/null || true \
+    && python3 -c "import transformers; print(transformers.__version__)" > /tmp/tf_ver.txt 2>/dev/null || true
+
 # =========================
 # Install vanilla Megatron-LM
 # =========================
@@ -56,9 +60,16 @@ RUN cd ttt/slime && pip install -e . --no-deps --no-build-isolation
 COPY pyproject.toml README* ./
 COPY coral/ coral/
 COPY ttt/ ttt/
-RUN pip install hatchling editables \
-    && pip install -e . --no-deps --no-build-isolation \
-    && pip install httpx fastapi uvicorn pylatexenc "litellm[proxy]" accelerate peft
+# Pin torch to base image version to prevent litellm/accelerate/peft from upgrading it,
+# which would break pre-compiled CUDA extensions (sgl_kernel, flash_attn, torchvision).
+RUN TORCH_VER=$(cat /tmp/torch_ver.txt) \
+    && pip install hatchling hatch-vcs editables \
+    && SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 pip install -e . --no-deps --no-build-isolation \
+    && pip install --ignore-installed "litellm[proxy]" httpx fastapi uvicorn pylatexenc accelerate peft \
+        "torch==${TORCH_VER}" "huggingface-hub<1.0,>=0.34.0" \
+        --extra-index-url https://download.pytorch.org/whl/cu129 \
+    && TF_VER=$(cat /tmp/tf_ver.txt) \
+    && if [ -n "$TF_VER" ]; then pip install "transformers==$TF_VER" --no-deps 2>/dev/null || true; fi
 
 # =========================
 # Entrypoint

@@ -237,7 +237,7 @@ if [ "${USE_LORA}" != "1" ]; then
      --attention-backend flash
   )
 else
-  MISC_ARGS=()
+  MISC_ARGS=(--attn-implementation "${ATTN_IMPL:-flash_attention_2}")
 fi
 
 # --- Wandb ---

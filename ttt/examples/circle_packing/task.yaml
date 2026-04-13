@@ -50,7 +50,7 @@ workspace:
   results_dir: "./results"
   repo_path: "./ttt/examples/circle_packing/seed"
   setup:
-    - "uv pip install numpy scipy"
+    - "uv pip install --system numpy scipy"
 
 run:
   verbose: false
