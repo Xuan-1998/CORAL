@@ -327,7 +327,22 @@ class AsyncRolloutWorker:
                     continue
 
                 agent_id = attempt.get("agent_id", "unknown")
-                score = attempt.get("score", 0.0) or 0.0
+                status = attempt.get("status", "")
+                raw_score = attempt.get("score")
+                feedback = attempt.get("feedback", "")
+                # Graduated penalties: syntax errors worse than runtime errors
+                # worse than low scores, to give GRPO reward variance
+                if raw_score is None or status == "crashed":
+                    if "SyntaxError" in feedback or "IndentationError" in feedback:
+                        score = -0.10  # worst: can't even parse
+                    elif "NameError" in feedback or "ImportError" in feedback:
+                        score = -0.07  # bad: missing names
+                    else:
+                        score = -0.04  # runtime crash but code parsed
+                else:
+                    score = float(raw_score)
+                    if score == 0.0 and status != "baseline":
+                        score = -0.01  # ran but produced nothing useful
                 parent_hash = attempt.get("parent_hash")
                 parent_score = 0.0
 

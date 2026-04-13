@@ -291,6 +291,20 @@ class CoralAPIServer:
         self._eval_scores: list[float] = []
         self._eval_scores_lock = threading.Lock()
 
+        # Credit assignment config
+        self._temporal_gamma = float(os.getenv("CORAL_TEMPORAL_GAMMA", "0.9"))
+        self._baseline_ema = 0.0
+        self._baseline_alpha = float(os.getenv("CORAL_BASELINE_ALPHA", "0.1"))
+        self._baseline_count = 0
+        self._zero_improvement_penalty = float(os.getenv("CORAL_ZERO_PENALTY", "-0.01"))
+
+        # Anti-hacking: score history for regression detection
+        self._score_history: dict[str, list[float]] = {}  # agent_id -> [scores]
+        self._regression_penalty = float(os.getenv("CORAL_REGRESSION_PENALTY", "0.5"))
+        # Anti-hacking: score sanity bounds
+        self._max_plausible_score = float(os.getenv("CORAL_MAX_SCORE", "2.0"))
+        self._max_plausible_improvement = float(os.getenv("CORAL_MAX_IMPROVEMENT", "0.5"))
+
         # Record file for session logging
         self._record_enabled = os.getenv("CORAL_RECORD_ENABLED", "0") == "1"
         self._record_file = os.getenv("CORAL_RECORD_FILE", "")
@@ -298,6 +312,15 @@ class CoralAPIServer:
             os.makedirs(os.path.dirname(self._record_file), exist_ok=True)
             open(self._record_file, "w").close()
             logger.info("[Coral] record file initialized: %s", self._record_file)
+
+        # Trajectory dump for post-trajectory training
+        self._traj_enabled = os.getenv("CORAL_TRAJ_ENABLED", "0") == "1"
+        self._traj_dir = os.getenv("CORAL_TRAJ_DIR", "")
+        if self._traj_enabled and self._traj_dir:
+            os.makedirs(self._traj_dir, exist_ok=True)
+            self._traj_turns_file = os.path.join(self._traj_dir, "turns.jsonl")
+            self._traj_evals_file = os.path.join(self._traj_dir, "evals.jsonl")
+            logger.info("[Coral] trajectory dump enabled: %s", self._traj_dir)
 
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
@@ -656,6 +679,7 @@ class CoralAPIServer:
             self._sample_fingerprints[sample.index] = fp
 
         self._write_record(agent_id, turn_num, messages, prompt_text, response_text, tool_calls)
+        self._write_trajectory(agent_id, turn_num, messages, response_text, tool_calls)
 
     # ---------------------------------------------------- gateway log reconciliation
 
@@ -722,13 +746,75 @@ class CoralAPIServer:
             improvement,
         )
 
+        # --- Anti-hacking checks ---
+
+        # 1. Score sanity: clamp implausibly high scores (grader manipulation)
+        if score > self._max_plausible_score:
+            logger.warning(
+                "[Coral] SUSPICIOUS: score=%.4f exceeds max_plausible=%.4f, clamping",
+                score, self._max_plausible_score,
+            )
+            score = min(score, self._max_plausible_score)
+            improvement = score - parent_score
+
+        # 2. Improvement sanity: clamp implausibly large jumps
+        if abs(improvement) > self._max_plausible_improvement:
+            logger.warning(
+                "[Coral] SUSPICIOUS: improvement=%.4f exceeds max_plausible=%.4f, clamping",
+                improvement, self._max_plausible_improvement,
+            )
+            improvement = max(-self._max_plausible_improvement,
+                            min(improvement, self._max_plausible_improvement))
+
+        # 3. Regression-recovery detection: if agent regressed then recovered,
+        #    discount the recovery reward to prevent intentional sabotage.
+        history = self._score_history.setdefault(agent_id, [])
+        if len(history) >= 2:
+            prev_prev = history[-2]
+            prev = history[-1]
+            # Pattern: score dropped then came back up
+            if prev < prev_prev and score > prev:
+                recovery = score - prev
+                original_gap = prev_prev - prev
+                # If recovery looks like restoring from self-inflicted damage
+                if recovery > 0.5 * original_gap:
+                    penalty_factor = self._regression_penalty
+                    logger.warning(
+                        "[Coral] REGRESSION-RECOVERY detected: %.4f->%.4f->%.4f, "
+                        "discounting improvement by %.0f%%",
+                        prev_prev, prev, score, (1 - penalty_factor) * 100,
+                    )
+                    improvement *= penalty_factor
+        history.append(score)
+
+        # Running baseline: EMA of improvements to reduce variance
+        self._baseline_count += 1
+        _warmup = int(os.getenv("CORAL_BASELINE_WARMUP", "5"))
+        if self._baseline_count <= _warmup:
+            # Cold start: accumulate running mean, don't subtract baseline
+            self._baseline_ema += (improvement - self._baseline_ema) / self._baseline_count
+            advantage = improvement  # raw improvement during warmup
+        else:
+            self._baseline_ema += self._baseline_alpha * (improvement - self._baseline_ema)
+            advantage = improvement - self._baseline_ema
+
+        # Zero improvement: small penalty instead of masking out entirely
+        if improvement == 0.0:
+            advantage = self._zero_improvement_penalty
+
+        logger.info(
+            "[Coral] eval: advantage=%.4f (baseline_ema=%.4f)",
+            advantage,
+            self._baseline_ema,
+        )
+
         with self._eval_scores_lock:
             self._eval_scores.append(improvement)
 
+        self._write_eval(agent_id, score, parent_score, improvement, advantage)
+
         with self._pending_lock:
             samples = self._pending_samples.pop(agent_id, [])
-            # Fallback: when gateway is disabled, OpenCode doesn't send
-            # X-Coral-Agent-Id, so samples are buffered under "unknown".
             if not samples and agent_id != "unknown":
                 samples = self._pending_samples.pop("unknown", [])
 
@@ -736,31 +822,36 @@ class CoralAPIServer:
             logger.info("[Coral] no pending samples for agent=%s, reward discarded", agent_id)
             return
 
-        # Clean up fingerprints for submitted samples
         for s in samples:
             self._sample_fingerprints.pop(s.index, None)
 
-        for s in samples:
-            s.reward = {"score": improvement}
-            # Exclude from loss if improvement is exactly 0 (no change)
-            if improvement == 0.0:
-                s.loss_mask = [0] * s.response_length
+        # Temporal weighting: linear ramp (adaptive to episode length).
+        # write/edit actions get higher weight than read/think.
+        n = len(samples)
+        for i, s in enumerate(samples):
+            base_weight = (i + 1) / n if n > 0 else 1.0
+            s.reward = {"score": advantage}
+            s.loss_mask = [base_weight] * s.response_length
 
-        # Submit to output queue
         for s in samples:
             self.output_queue.put((s.group_index, [s]))
 
         logger.info(
-            "[Coral] submitted %d samples for agent=%s with reward=%.4f",
+            "[Coral] submitted %d samples for agent=%s reward=%.4f "
+            "temporal_weights=[%.3f..%.3f]",
             len(samples),
             agent_id,
-            improvement,
+            advantage,
+            (1.0 / n) if n > 0 else 0,
+            1.0,
         )
 
     def flush_agent(self, agent_id: str) -> None:
-        """Submit any remaining buffered samples for an agent with reward=0.
+        """Discard any remaining buffered samples for an agent.
 
         Called when an agent dies or session ends without a final eval.
+        These samples have no reward signal, so we drop them instead of
+        wasting batch slots with zero-masked entries.
         """
         self._reconcile_unknown_samples()
 
@@ -772,11 +863,12 @@ class CoralAPIServer:
 
         for s in samples:
             self._sample_fingerprints.pop(s.index, None)
-            s.reward = {"score": 0.0}
-            s.loss_mask = [0] * s.response_length  # Don't train on unrewarded samples
 
-        for s in samples:
-            self.output_queue.put((s.group_index, [s]))
+        logger.info(
+            "[Coral] discarded %d unrewarded samples for agent=%s",
+            len(samples),
+            agent_id,
+        )
 
         logger.info(
             "[Coral] flushed %d unrewarded samples for agent=%s",
@@ -797,6 +889,12 @@ class CoralAPIServer:
             self._eval_scores.clear()
 
     # ---------------------------------------------------- record file
+
+    def _write_trajectory(self, *args, **kwargs):
+        pass  # stub: trajectory logging not yet implemented
+
+    def _write_eval(self, *args, **kwargs):
+        pass  # stub: eval logging not yet implemented
 
     def _write_record(
         self,
