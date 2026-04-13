@@ -1,0 +1,239 @@
+================================================================================
+CROSS-TASK ANALYSIS: RLVR LENS ON MULTIAGENT SYSTEMS
+Tasks: 7 | Conditions: 4
+================================================================================
+
+############################################################
+# CLAIM 1: Capability Boundary
+# RLVR: 'Base model surpasses RL at large k'
+# Analog: Does 1agent/no_sharing beat coevol at large N?
+############################################################
+
+  === circle_packing (direction=maximize) ===
+  Threshold        1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  0.9                   1          6         11          4
+  0.95                  1          6         11          4
+  0.99                  5          6         11          4
+  0.999                 5        131        111          7
+  1.0                  11        621        111         14
+
+  Metric           1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  N evals              62        860        715        181
+  Best           1.000000   1.000005   1.000003   1.000006
+  Impr%               26%        40%        26%        42%
+
+  === erdos (direction=maximize) ===
+  Threshold        1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  0.9                   1          1          6          2
+  0.95                  1          6         11          2
+  0.99                  3          6         11          2
+  0.999                 5         46         31         11
+  1.0                   9      never      never         86
+
+  Metric           1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  N evals              10        220        140        176
+  Best           1.000125   0.999755   0.999040   1.000137
+  Impr%              100%        64%        61%        43%
+
+  === kernel_builder (direction=minimize) ===
+  Threshold        1agent     coevol   no_share
+  ---------------------------------------------
+  10000                 3         21          3
+  5000                  5         26          3
+  3000                  5         41          4
+  2000              never      never      never
+  1500              never      never      never
+
+  Metric           1agent     coevol   no_share
+  ---------------------------------------------
+  N evals               6        100         10
+  Best               2132       2126       2125
+  Impr%              100%        70%        90%
+
+  === heilbronn (direction=maximize) ===
+  Threshold        1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  0.5                   1          1         11          1
+  0.7                   1          1         11          4
+  0.9               never         36      never         17
+  0.95              never         81      never      never
+  1.0               never      never      never      never
+
+  Metric           1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  N evals               1        160         40         21
+  Best           0.800214   0.971307   0.753513   0.942232
+  Impr%              100%        62%        88%        71%
+
+  === signal (direction=maximize) ===
+  Threshold        1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  0.5                   2          1          6          3
+  0.7                   8         41         81         10
+  0.9               never      never      never      never
+  0.95              never      never      never      never
+  1.0               never      never      never      never
+
+  Metric           1agent     coevol   att_only   no_share
+  --------------------------------------------------------
+  N evals              10        150        135         50
+  Best           0.701343   0.729324   0.708476   0.741713
+  Impr%               60%        73%        70%        42%
+
+  === hexagon_12 (direction=maximize) ===
+  Threshold        coevol
+  -----------------------
+  0.3                   1
+  0.5                   1
+  0.7                   6
+  0.9                   6
+  1.0               never
+
+  Metric           coevol
+  -----------------------
+  N evals              10
+  Best           0.941056
+  Impr%              100%
+
+  === matmul (direction=maximize) ===
+  Threshold        1agent     coevol   no_share
+  ---------------------------------------------
+  0.3                   1          1          1
+  0.5                   1          1          1
+  0.7                   1          1          1
+  0.9               never         31      never
+  1.0               never         31      never
+
+  Metric           1agent     coevol   no_share
+  ---------------------------------------------
+  N evals               3         45          5
+  Best           0.800000   1.000000   0.800000
+  Impr%               33%        56%        80%
+
+############################################################
+# CLAIM 2: Sampling Efficiency vs Boundary
+# RLVR: 'RL improves pass@1 but shrinks solution space'
+# Analog: coevol faster early but lower ceiling?
+############################################################
+
+  === circle_packing ===
+  Early (k=5)        0.999957   0.364102   0.364102   0.996157
+  Mid (k=20)         1.000000   0.996033   0.997598   1.000000
+  Late (all)         1.000000   1.000005   1.000003   1.000006
+
+  === erdos ===
+  Early (k=5)        0.999990   0.940570   0.895949   0.996746
+  Mid (k=20)         1.000125   0.996904   0.998849   0.999718
+  Late (all)         1.000125   0.999755   0.999040   1.000137
+
+  === kernel_builder ===
+  Early (k=5)            2132      11910       2130
+  Mid (k=20)             2132      11429       2125
+  Late (all)             2132       2126       2125
+
+  === heilbronn ===
+  Early (k=5)        0.800214   0.722335   0.229049   0.876756
+  Mid (k=20)         0.800214   0.867326   0.732434   0.942232
+  Late (all)         0.800214   0.971307   0.753513   0.942232
+
+  === signal ===
+  Early (k=5)        0.671130   0.573806   0.499049   0.640409
+  Mid (k=20)         0.701343   0.589103   0.662813   0.735169
+  Late (all)         0.701343   0.729324   0.708476   0.741713
+
+  === matmul ===
+  Early (k=5)        0.800000   0.800000   0.800000
+  Mid (k=20)         0.800000   0.800000   0.800000
+  Late (all)         0.800000   1.000000   0.800000
+
+############################################################
+# CLAIM 3: Exploration Narrowing
+# RLVR: 'RL narrows the solution space'
+# Analog: Does sharing reduce strategy diversity?
+############################################################
+
+  === circle_packing ===
+  1agent: 1 agent, 129 unique terms
+  coevol: Jaccard=0.385, 371 unique terms
+  att_only: Jaccard=0.405, 329 unique terms
+  no_share: Jaccard=0.414, 270 unique terms
+
+  === erdos ===
+  1agent: 1 agent, 30 unique terms
+  coevol: Jaccard=0.371, 150 unique terms
+  att_only: Jaccard=0.316, 98 unique terms
+  no_share: Jaccard=0.429, 324 unique terms
+
+  === kernel_builder ===
+  1agent: 1 agent, 15 unique terms
+  coevol: Jaccard=0.158, 68 unique terms
+  no_share: Jaccard=0.327, 40 unique terms
+
+  === heilbronn ===
+  1agent: 1 agent, 7 unique terms
+  coevol: Jaccard=0.398, 90 unique terms
+  att_only: Jaccard=0.282, 31 unique terms
+  no_share: Jaccard=0.278, 82 unique terms
+
+  === signal ===
+  1agent: 1 agent, 47 unique terms
+  coevol: Jaccard=0.315, 105 unique terms
+  att_only: Jaccard=0.297, 92 unique terms
+  no_share: Jaccard=0.335, 162 unique terms
+
+  === matmul ===
+  1agent: 1 agent, 19 unique terms
+  coevol: Jaccard=0.113, 55 unique terms
+  no_share: Jaccard=0.166, 36 unique terms
+
+############################################################
+# CLAIM 4: Distillation vs RL
+# RLVR: 'Distillation expands boundary, RL does not'
+# Analog: attempts_only (score signal) vs coevol (full knowledge)
+############################################################
+
+  === circle_packing ===
+  coevol (RL analog): n=860, best=1.00000509, impr=40%
+  att_only (distill analog): n=715, best=1.00000256, impr=26%
+
+  === erdos ===
+  coevol (RL analog): n=220, best=0.99975466, impr=64%
+  att_only (distill analog): n=140, best=0.99903952, impr=61%
+
+  === kernel_builder ===
+  coevol (RL analog): n=100, best=2126, impr=70%
+  att_only (distill analog): no data
+
+  === heilbronn ===
+  coevol (RL analog): n=160, best=0.97130676, impr=62%
+  att_only (distill analog): n=40, best=0.75351336, impr=88%
+
+  === signal ===
+  coevol (RL analog): n=150, best=0.72932383, impr=73%
+  att_only (distill analog): n=135, best=0.70847561, impr=70%
+
+  === hexagon_12 ===
+  coevol (RL analog): n=10, best=0.94105626, impr=100%
+  att_only (distill analog): no data
+
+  === matmul ===
+  coevol (RL analog): n=45, best=1.00000000, impr=56%
+  att_only (distill analog): no data
+
+############################################################
+# SUMMARY: Which condition wins on each task?
+############################################################
+
+  Task                 Best Condition       Best Score      N evals    2nd Best            
+  -------------------------------------------------------------------------------------
+  circle_packing       no_share             1.00000553      181        coevol              
+  erdos                no_share             1.00013705      176        1agent              
+  kernel_builder       no_share             2125            10         coevol              
+  heilbronn            coevol               0.97130676      160        no_share            
+  signal               no_share             0.74171324      50         coevol              
+  hexagon_12           coevol               0.94105626      10         N/A                 
+  matmul               coevol               1.00000000      45         1agent              
