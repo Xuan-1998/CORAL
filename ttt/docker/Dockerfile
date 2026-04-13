@@ -29,6 +29,7 @@ RUN python3 -c "import torch; print(torch.__version__)" > /tmp/torch_ver.txt 2>/
 # =========================
 # Install vanilla Megatron-LM
 # =========================
+RUN pip install pybind11
 ARG MEGATRON_COMMIT=3714d81d418c9f1bca4594fc35f9e8289f652862
 RUN git clone https://github.com/NVIDIA/Megatron-LM.git /opt/megatron-lm && \
     cd /opt/megatron-lm && git checkout ${MEGATRON_COMMIT} && \
@@ -68,6 +69,7 @@ RUN TORCH_VER=$(cat /tmp/torch_ver.txt) \
     && pip install --ignore-installed "litellm[proxy]" httpx fastapi uvicorn pylatexenc accelerate peft \
         "torch==${TORCH_VER}" "huggingface-hub<1.0,>=0.34.0" \
         --extra-index-url https://download.pytorch.org/whl/cu129 \
+        "numpy<2" \
     && TF_VER=$(cat /tmp/tf_ver.txt) \
     && if [ -n "$TF_VER" ]; then pip install "transformers==$TF_VER" --no-deps 2>/dev/null || true; fi
 
