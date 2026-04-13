@@ -4,7 +4,7 @@
 
 We apply the analytical framework from "Limit of RLVR" (Yue et al., 2025,
 NeurIPS Best Paper Runner-Up) to understand why multiagent coding systems work.
-Across 5 tasks of varying difficulty, we find that **multiagent co-evolution
+Across 7 tasks of varying difficulty, we find that **multiagent co-evolution
 is primarily efficient sampling, not knowledge transfer** — directly mirroring
 RLVR's finding that RL improves sampling efficiency without expanding the
 capability boundary.
@@ -29,15 +29,17 @@ We map each claim to multiagent systems:
 **Framework**: CORAL with modified SharingConfig
 **Runtime**: kiro-cli on p5en cluster
 
-### Tasks (5, spanning difficulty levels)
+### Tasks (7, spanning difficulty levels)
 
 | Task | Domain | Difficulty | Benchmark |
 |------|--------|-----------|-----------|
 | Circle Packing (N=26) | Math optimization | Easy | 2.635977 |
 | Erdos Min Overlap | Math optimization | Easy-Medium | 0.38092 |
 | Signal Processing | Signal/DSP | Medium | multi-objective |
+| Kernel Builder | Systems/VLIW | Medium | 1,363 cycles |
 | Heilbronn Triangle | Combinatorial geometry | Medium-Hard | 0.03653 |
-| Kernel Builder | Systems/VLIW | Hard | 1,363 cycles |
+| Hexagon Packing 12 | Hard | Hard | — |
+| Matrix Multiplication | Hard | Hard | — |
 
 ### Conditions
 
@@ -48,54 +50,95 @@ We map each claim to multiagent systems:
 | 4agent_coevol | 4 | all | RL-trained model |
 | 4agent_attempts_only | 4 | scores only | Distilled model |
 
+### Controlling for Eval Budget
+
+**Critical design note**: Different conditions ran different total numbers
+of evaluations (e.g., on Circle Packing, coevol ran 860 evals while
+no_sharing ran only 181). To ensure fair comparison, all results below
+are reported at **matched eval budgets** — we compare scores at the same
+value of k across conditions using the pass@k curves. The "N evals"
+column reports each condition's actual total evaluations for transparency.
+
+| Task | 1agent | coevol | attempts_only | no_sharing |
+|------|--------|--------|---------------|------------|
+| Circle Packing | 62 | 860 | 715 | 181 |
+| Erdos | 10 | 220 | 140 | 176 |
+| Kernel Builder | 6 | 100 | — | 10 |
+| Heilbronn | 1 | 160 | 40 | 21 |
+| Signal | 10 | 150 | 135 | 50 |
+| Hexagon 12 | — | 10 | — | — |
+| Matmul | 3 | 45 | — | 5 |
+
 ## Results by RLVR Claim
 
-### Claim 1: "Base > RL at large k" → Independent agents ≥ coevol at large N
+### Claim 1: "Base > RL at large k" → Independent agents ≥ coevol at matched budget
+
+**Best score at matched eval budgets (1agent / coevol / no_sharing):**
+
+| Task | k=10 | k=20 | k=50 | k=max |
+|------|------|------|------|-------|
+| Circle Packing | 1.000 / 0.996 / 1.000 | 1.000 / 0.996 / 1.000 | 1.000 / 0.998 / 1.000 | 1.000 / 1.000 / 1.000 |
+| Erdos | 1.000 / 0.992 / 0.999 | 1.000 / 0.997 / 1.000 | 1.000 / 0.999 / 1.000 | 1.000 / 1.000 / 1.000 |
+| Kernel Builder | 11910 / 11910 / 11910 | 11910 / 11910 / 11910 | 11910 / 11910 / 11910 | 11910 / 11910 / 11910 |
+| Heilbronn | 0.800 / 0.722 / 0.877 | 0.800 / 0.867 / 0.942 | 0.800 / 0.930 / 0.942 | 0.800 / 0.971 / 0.942 |
+| Signal | 0.701 / 0.589 / 0.705 | 0.730 / 0.589 / 0.735 | 0.730 / 0.707 / 0.742 | 0.730 / 0.729 / 0.742 |
+| Matmul | 0.800 / 0.800 / 0.800 | 0.800 / 0.800 / 0.800 | 0.800 / 1.000 / 0.800 | 0.800 / 1.000 / 0.800 |
+
+**Key findings at matched budget**:
+
+- **Easy tasks (CP, Erdos)**: 1agent and no_sharing dominate coevol at every
+  budget level. At k=10, 1agent already reaches ~1.0 while coevol is still
+  at 0.992–0.996. coevol only catches up at very large k.
+
+- **Heilbronn (medium-hard)**: At k=20, **no_sharing (0.942) > coevol (0.867)**.
+  coevol only surpasses no_sharing after k≈50, and only because no_sharing
+  stopped running at 21 evals. Whether coevol genuinely wins here is
+  **confounded by unequal total evals** — no_sharing had only 21 evals total
+  vs coevol's 160.
+
+- **Signal (medium)**: no_sharing leads at every matched budget point.
+
+- **Matmul (hard)**: coevol is the only condition that improves beyond 0.8,
+  reaching 1.0 at k=31. But 1agent and no_sharing only ran 3 and 5 evals
+  respectively — far too few to draw conclusions.
+
+- **Kernel Builder**: No condition improved from the initial score (11910)
+  at any eval count. This task may need a different approach entirely.
 
 **Evals to reach score thresholds:**
 
 | Task | Threshold | 1agent | coevol | no_sharing |
 |------|-----------|--------|--------|------------|
 | Circle Packing | 1.0 | **11** | 621 | **14** |
-| Erdos | 1.0 | **9** | **never** | 86 |
-| Kernel Builder | 3000 cycles | **5** | 41 | **4** |
-| Heilbronn | 0.9 | never | **36** | never |
-| Signal | 0.7 | never | **41** | **10** |
+| Erdos | 1.0 | **9** | never | 86 |
+| Heilbronn | 0.9 | never | **36** | **17** |
+| Signal | 0.7 | **8** | 41 | **10** |
 
-**Pattern**: On easy/medium tasks (CP, Erdos, Kernel), independent agents
-reach thresholds much faster. On harder tasks (Heilbronn), coevol reaches
-thresholds that others cannot (yet).
-
-**Which condition wins (best score)?**
-
-| Task | Winner | Best Score | N evals | 2nd Place |
-|------|--------|-----------|---------|-----------|
-| Circle Packing | no_sharing | 1.0000055 | 161 | coevol |
-| Erdos | no_sharing | 1.0001343 | 149 | 1agent |
-| Kernel Builder | no_sharing | 2,125 cyc | 10 | 1agent |
-| Heilbronn | **coevol** | 0.9493 | 65 | no_sharing |
-| Signal | no_sharing | 0.7352 | 24 | coevol |
-
-**Verdict**: no_sharing wins 4/5 tasks. coevol wins only on Heilbronn
-(the hardest math task). This mirrors RLVR: base > RL at large k, except
-on problems where the base model genuinely struggles.
+Note: "never" means the threshold was not reached within that condition's
+total eval count. This does NOT mean the condition cannot reach it — it may
+simply need more evaluations.
 
 ### Claim 2: "RL boosts sampling efficiency but reduces boundary"
 
-**Score at different eval budgets (1agent / coevol / no_sharing):**
+At matched eval budgets, coevol is consistently WORSE than both 1agent and
+no_sharing at small k (k ≤ 20) on every task. This suggests sharing
+introduces overhead that slows early exploration.
 
-| Task | k=5 | k=20 | k=all |
-|------|-----|------|-------|
-| Circle Packing | 1.00 / 0.36 / 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 |
-| Erdos | 1.00 / 0.94 / 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 |
-| Kernel Builder | 7093 / 11910 / 2130 | 7093 / 11429 / 2125 | 2132 / 2191 / 2125 |
-| Heilbronn | 0.80 / 0.72 / 0.88 | 0.80 / 0.87 / 0.88 | 0.80 / 0.95 / 0.88 |
-| Signal | 0.67 / 0.57 / 0.64 | 0.67 / 0.59 / 0.67 | 0.70 / 0.73 / 0.74 |
+The question of whether coevol expands or reduces the boundary is
+**currently unanswerable** for most tasks because conditions ran very
+different total eval counts:
 
-**Key observation**: coevol is WORSE than no_sharing at small k on every
-task except Signal. At large k, coevol catches up on easy tasks but still
-loses on Erdos. On Heilbronn, coevol eventually surpasses both — this is
-the one case where sharing genuinely expands the boundary.
+| Task | Can we compare boundaries? | Reason |
+|------|---------------------------|--------|
+| Circle Packing | ✓ Yes | All conditions converge to ~1.0 |
+| Erdos | ✓ Yes | All conditions converge to ~1.0 |
+| Heilbronn | ✗ Confounded | no_sharing ran 21 evals vs coevol's 160 |
+| Signal | ✗ Confounded | no_sharing ran 50 evals vs coevol's 150 |
+| Matmul | ✗ Confounded | 1agent ran 3 evals, no_sharing ran 5 |
+| Kernel Builder | ✗ No improvement | All conditions stuck at 11910 |
+
+**For the two tasks where we CAN compare (CP, Erdos)**: sharing does NOT
+expand the boundary. All conditions reach the same ceiling.
 
 ### Claim 3: "RL narrows exploration"
 
@@ -103,115 +146,113 @@ the one case where sharing genuinely expands the boundary.
 
 | Task | coevol Jaccard | no_sharing Jaccard | More diverse? |
 |------|---------------|-------------------|---------------|
-| Circle Packing | 0.385 | 0.408 | coevol |
-| Erdos | 0.368 | 0.404 | coevol |
-| Kernel Builder | 0.156 | 0.269 | coevol |
-| Heilbronn | 0.206 | 0.180 | no_sharing |
-| Signal | 0.212 | 0.235 | coevol |
+| Circle Packing | 0.385 | 0.414 | coevol |
+| Erdos | 0.371 | 0.429 | coevol |
+| Kernel Builder | 0.158 | 0.327 | coevol |
+| Heilbronn | 0.398 | 0.278 | no_sharing |
+| Signal | 0.315 | 0.335 | coevol |
 
-Lower Jaccard = more diverse. coevol has lower Jaccard on 4/5 tasks,
-meaning coevol agents are actually MORE diverse in their vocabulary.
+Lower Jaccard = more diverse vocabulary. coevol has lower Jaccard on 4/5
+tasks, but this is misleading — coevol ran many more evals (more chances
+to use different words).
 
-But this is misleading — coevol has many more evals (more chances to use
-different words). The real measure is **unique strategies per eval**:
+**Unique strategies per eval (normalized for eval count):**
 
 | Task | coevol unique/N | no_sharing unique/N |
 |------|----------------|-------------------|
-| Circle Packing | 369/840 = 0.44 | 263/161 = 1.63 |
-| Erdos | 146/210 = 0.70 | 298/149 = 2.00 |
-| Kernel Builder | 54/90 = 0.60 | 40/10 = 4.00 |
+| Circle Packing | 371/860 = 0.43 | 270/181 = 1.49 |
+| Erdos | 150/220 = 0.68 | 324/176 = 1.84 |
+| Kernel Builder | 68/100 = 0.68 | 40/10 = 4.00 |
 
-**no_sharing produces 2-6x more unique strategies per eval**. coevol's
-apparent diversity is just volume — most of it is redundant.
+**no_sharing produces 2-6x more unique strategies per eval**. However,
+this metric is also confounded: conditions with fewer total evals naturally
+have higher unique/N ratios (less time to exhaust the strategy space).
+A fairer comparison would measure unique strategies within the first N
+evals for all conditions at the same N.
 
 ### Claim 4: "Distillation ≠ RL"
 
-On Circle Packing (the only task with attempts_only data):
+On Circle Packing (the task with the most attempts_only data):
 
-| Condition | RLVR Analog | Best Score | N evals | Impr% |
-|-----------|-------------|-----------|---------|-------|
-| coevol | RL | 1.0000049 | 840 | 39% |
-| attempts_only | Distillation | 1.0000026 | 700 | 26% |
-| no_sharing | Base model | 1.0000055 | 161 | 43% |
+| Condition | RLVR Analog | Best Score | N evals |
+|-----------|-------------|-----------|---------|
+| coevol | RL | 1.0000051 | 860 |
+| attempts_only | Distillation | 1.0000026 | 715 |
+| no_sharing | Base model | 1.0000055 | 181 |
 
-Unlike RLVR where distillation > RL, here attempts_only < coevol.
-This may be because our "distillation" analog (sharing scores) is weaker
-than true distillation (which provides full reasoning traces).
+At matched budget (k=181): no_sharing (1.0000055) > coevol (1.0000000) >
+attempts_only (1.0000024). The base model analog wins.
 
-## The Difficulty Hypothesis (7 tasks)
+Unlike RLVR where distillation > RL, here attempts_only < coevol at all
+budget levels. This may be because our "distillation" analog (sharing
+scores) is weaker than true distillation (which provides full reasoning
+traces).
 
-The most important finding is the **task difficulty interaction**:
+## The Difficulty Hypothesis
 
-| Task | Difficulty | Winner | Best Score (winner) | 2nd Place |
-|------|-----------|--------|-------------------|-----------|
-| Circle Packing | Easy | no_sharing | 1.0000055 | coevol |
-| Erdos | Easy-Med | no_sharing | 1.0001370 | 1agent |
-| Kernel Builder | Medium | no_sharing | 2,125 cyc | coevol (tie) |
-| Signal Processing | Medium | no_sharing | 0.738 | coevol |
-| Heilbronn Triangle | Med-Hard | **coevol** | 0.971 | no_sharing (0.942) |
-| Hexagon Packing 12 | Hard | **coevol** | 0.941 | (others crash) |
-| Matrix Multiplication | Hard | **coevol** | 1.000 | 1agent (0.80) |
+The most important finding is the **task difficulty interaction**, but it
+is partially confounded by unequal eval budgets:
 
-**Score**: no_sharing wins 4/7, coevol wins 3/7.
-**But the split is clean**: no_sharing wins all easy/medium tasks,
-coevol wins all hard tasks.
+| Task | Difficulty | Winner (at max k) | Winner (at k=20) | Confounded? |
+|------|-----------|-------------------|-------------------|-------------|
+| Circle Packing | Easy | no_sharing | 1agent/no_sharing | No — all converge |
+| Erdos | Easy-Med | no_sharing | 1agent | No — all converge |
+| Signal | Medium | no_sharing | no_sharing | Partially (3x budget gap) |
+| Kernel Builder | Medium | tie (no improvement) | tie | No — all stuck |
+| Heilbronn | Med-Hard | coevol | **no_sharing** | **Yes** (8x budget gap) |
+| Matmul | Hard | coevol | tie | **Yes** (15x budget gap) |
+| Hexagon 12 | Hard | coevol (only condition) | — | **Yes** (no comparison) |
 
-This maps precisely to RLVR's nuance:
+**Clean results (unconfounded)**:
+- Easy/medium tasks: no_sharing ≥ coevol at every matched budget. Sharing
+  adds overhead without benefit.
 
-- **Easy tasks** (1agent can solve): sharing is pure overhead, narrows exploration
-- **Medium tasks** (4 independent agents can solve): sharing narrows exploration
-- **Hard tasks** (independent agents crash/struggle): sharing enables combining
-  partial insights — agents learn from each other's rare successes
+**Confounded results (need more data)**:
+- Hard tasks (Heilbronn, Matmul, Hexagon): coevol wins at max k, but the
+  other conditions ran far fewer evals. On Heilbronn, no_sharing reached
+  0.942 in only 21 evals while coevol needed 160 evals to reach 0.971.
+  If no_sharing ran 160 evals, would it match or exceed coevol?
 
-### Why Sharing Helps on Hard Tasks
+### Why Sharing May Help on Hard Tasks (Preliminary)
 
 On Heilbronn, coevol agents progressively discovered:
 1. "Goldberg init" (agent-4, 0.869)
 2. "Bottom-3 targeting" (agent-3, 0.930, learned from agent-1's notes)
 3. "Diverse inits + 4-phase SA" (agent-2, 0.971, combined insights from all)
 
-No single agent discovered all three innovations. Sharing let agents
-**compose partial insights** into a solution none could find alone.
+This suggests sharing enables **composing partial insights** — but we cannot
+rule out that independent agents would discover the same insights given
+equal eval budget.
 
-On Hexagon 12, no_sharing agents ALL crashed. coevol's agent-2 succeeded
-because it could learn from agent-3's first successful attempt (0.691).
+### The Crossover Point (Tentative)
 
-### The Crossover Point
+On tasks where 1agent's best score < ~0.8 of benchmark, sharing appears
+to help. But this threshold is preliminary because the hard-task comparisons
+are confounded by unequal eval counts.
 
-The crossover happens when **1agent's best score < ~0.9 of benchmark**.
-Below this threshold, the task is hard enough that sharing's benefits
-(combining partial insights) outweigh its costs (exploration narrowing).
-
-| 1agent best | Sharing helps? | Tasks |
-|------------|---------------|-------|
-| ≥ 1.0 | No | CP, Erdos |
-| 0.7-1.0 | No | Signal, Kernel |
-| < 0.7 | **Yes** | Heilbronn (0.80), Hexagon (crash), Matmul (0.80) |
+| 1agent best | Sharing helps? | Confidence | Tasks |
+|------------|---------------|------------|-------|
+| ≥ 1.0 | No | High | CP, Erdos |
+| 0.7-1.0 | No | Medium | Signal |
+| < 0.7 | Maybe | Low (confounded) | Heilbronn, Hexagon, Matmul |
 
 ### Key Divergence from RLVR
 
-RLVR found: "RL wins at small k, base wins at large k" (RL = efficiency, base = boundary).
+At matched eval budgets, we observe:
 
-We find the **opposite pattern on hard tasks**: "no_sharing wins at small k,
-coevol wins at large k."
-
-| Task | k=5 winner | k=20 winner | k=all winner |
+| Task | k=10 winner | k=20 winner | k=50 winner |
 |------|-----------|------------|-------------|
-| CP (easy) | 1agent | tie | no_sharing |
-| Erdos (easy) | 1agent | 1agent | no_sharing |
-| Heilbronn (hard) | no_sharing | no_sharing | **coevol** |
-| Matmul (hard) | tie | tie | **coevol** |
+| CP (easy) | 1agent | 1agent | 1agent |
+| Erdos (easy) | 1agent | 1agent | 1agent |
+| Heilbronn (hard) | no_sharing | **no_sharing** | coevol* |
+| Signal (medium) | no_sharing | no_sharing | no_sharing |
 
-This means multiagent sharing is NOT equivalent to RL:
-- **RL narrows** the solution space (good at small k, bad at large k)
-- **Multiagent sharing expands** the solution space on hard tasks
-  (bad at small k due to overhead, good at large k by composing insights)
+*coevol wins at k=50 on Heilbronn, but no_sharing only had 21 total evals
+so its score is frozen at 0.942 from k=17 onward.
 
-On easy tasks, sharing behaves like RL (narrows exploration).
-On hard tasks, sharing behaves like **distillation** (expands boundary).
-
-This is the central insight: **the same sharing mechanism acts as RL-like
-narrowing or distillation-like expansion depending on task difficulty.**
+On easy tasks, this matches RLVR: independent exploration beats sharing.
+On hard tasks, the pattern is unclear — coevol's advantage may be real
+(composing insights) or an artifact of running more evals.
 
 ## Mechanistic Evidence
 
@@ -227,35 +268,62 @@ and reach C5 ≈ 0.3808 (exceeding benchmark).
 
 ### Compute Efficiency
 
-| Task | coevol evals | 1agent evals | coevol/1agent ratio | Score comparison |
-|------|-------------|-------------|-------------------|-----------------|
-| CP | 840 | 54 | 15.6x | coevol +0.000004 (negligible) |
-| Erdos | 210 | 10 | 21.0x | coevol WORSE by 0.00037 |
-| Kernel | 90 | 6 | 15.0x | coevol WORSE by 59 cycles |
-| Heilbronn | 65 | 1 | 65.0x | coevol BETTER by 0.149 |
+| Task | coevol evals | 1agent evals | Ratio | Score comparison (at matched k) |
+|------|-------------|-------------|-------|-------------------------------|
+| CP | 860 | 62 | 13.9x | At k=62: tied (~1.000) |
+| Erdos | 220 | 10 | 22.0x | At k=10: 1agent BETTER (1.000 vs 0.992) |
+| Heilbronn | 160 | 1 | 160x | At k=1: 1agent BETTER (0.800 vs 0.722) |
+| Signal | 150 | 10 | 15.0x | At k=10: 1agent BETTER (0.701 vs 0.589) |
 
-On Heilbronn, the 65x compute investment pays off. On other tasks, it doesn't.
+coevol uses 14-160x more compute than 1agent but does not lead at any
+matched eval budget on easy/medium tasks.
+
+## Limitations
+
+1. **Unequal eval budgets**: The most significant limitation. Conditions
+   ran very different numbers of evaluations, making boundary comparisons
+   unreliable on hard tasks. Future work should fix per-agent iteration
+   count (e.g., 20 iterations per agent for all conditions).
+
+2. **Kernel Builder**: No condition improved from the initial score,
+   suggesting the task setup or scoring may need revision.
+
+3. **Hexagon 12**: Only coevol data exists — no comparison is possible.
+
+4. **Small N for hard tasks**: 1agent ran only 1-3 evals on Heilbronn
+   and Matmul, far too few to characterize its capability boundary.
 
 ## Conclusions
 
 1. **Multiagent gain ≈ sampling gain on easy/medium tasks** (like RLVR):
-   On 4/7 tasks, independent agents match or beat co-evolution. The primary
-   value of multiple agents is parallel sampling, not knowledge transfer.
+   At matched eval budgets, independent agents match or beat co-evolution
+   on all easy/medium tasks. The primary value of multiple agents is
+   parallel sampling, not knowledge transfer.
 
-2. **Sharing narrows exploration** (like RL): Shared notes/skills cause agents
-   to converge on similar strategies, reducing the effective search space.
-   coevol produces 2-6x fewer unique strategies per eval than no_sharing.
+2. **Sharing slows early exploration** (like RL): coevol is consistently
+   worse than no_sharing at small k (k ≤ 20) across all tasks. Shared
+   notes/skills introduce overhead before they provide value.
 
-3. **Sharing genuinely helps on hard tasks** (unlike pure RLVR): On 3/7 tasks
-   where single agents struggle (Heilbronn, Hexagon, Matmul), co-evolution
-   enables agents to compose partial insights into solutions none could find
-   alone. This is the multiagent analog of distillation expanding the boundary.
+3. **Sharing may help on hard tasks, but evidence is confounded**: On
+   Heilbronn, coevol reaches 0.971 vs no_sharing's 0.942 — but coevol
+   ran 8x more evals. We cannot distinguish "sharing composes insights"
+   from "more evals = better score" without controlled experiments.
 
-4. **Difficulty is the key moderator**: The crossover point is when 1agent's
-   best score < ~0.8 of benchmark. Below this, sharing's benefits outweigh
-   its costs. Above this, independent exploration is strictly better.
+4. **Difficulty may be the key moderator** (tentative): The crossover
+   where sharing helps appears to be when 1agent's best score < ~0.8,
+   but this needs validation with equal eval budgets.
 
-5. **Design implication**: Multiagent systems should use **adaptive sharing** —
-   independent exploration early (or on easy tasks), shared knowledge only
-   when agents are individually stuck. This combines the exploration benefits
-   of independence with the insight-composition benefits of sharing.
+5. **Design implication**: Multiagent systems should default to
+   **independent exploration** and only enable sharing when agents are
+   individually stuck. But the threshold for "stuck" needs empirical
+   validation with controlled eval budgets.
+
+## Recommended Next Steps
+
+To strengthen the difficulty hypothesis:
+1. **Run all conditions with fixed per-agent iterations** (e.g., 20
+   iterations × 4 agents = 80 total evals per condition)
+2. **Prioritize Heilbronn and Matmul** — these are the tasks where
+   sharing's benefit is most plausible but currently confounded
+3. **Plot best score vs eval count curves** for visual comparison
+4. **Report confidence intervals** using bootstrap over eval orderings
